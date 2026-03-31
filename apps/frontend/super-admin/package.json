@@ -1,0 +1,30 @@
+{
+  "name": "@repo/super-admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf .next"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "react": "^18",
+    "react-dom": "^18",
+    "@tanstack/react-query": "^5.17.0",
+    "@repo/shared-frontend": "workspace:*",
+    "@repo/shared-common": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "@repo/tsconfig": "workspace:*",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4"
+  }
+}

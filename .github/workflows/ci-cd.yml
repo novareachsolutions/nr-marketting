@@ -1,0 +1,130 @@
+name: CI/CD (main)
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ['api', 'tenent-dashboard', 'super-admin', 'customer-website']
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 🏗️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🔨 Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          target: ${{ matrix.service }}-production
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Compute deployment tag
+        id: tag
+        run: echo "TAG=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Deploy to server
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          TAG: ${{ steps.tag.outputs.TAG }}
+          APP_DIR: ${{ secrets.DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          envs: TAG,APP_DIR
+          script: |
+            set -euo pipefail
+            echo "📦 Deploying tag: ${TAG}"
+            echo "📁 APP_DIR: ${APP_DIR}"
+            cd "${APP_DIR}"
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh "${TAG}"
+
+      - name: ✉️ Send deployment notification
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          secure: ${{ secrets.SMTP_SECURE }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: 'Deployment #${{ github.run_number }} - ${{ job.status }}'
+          from: 'CI/CD <${{ secrets.SMTP_USERNAME }}>'
+          to: ${{ secrets.DEPLOY_NOTIFY_TO }}
+          html_body: |
+            <div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:#f6f8fa;padding:20px;">
+              <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,0.1);overflow:hidden;">
+                <div style="background:linear-gradient(90deg,#2563eb,#1e3a8a);padding:16px 24px;color:#fff;">
+                  <h2 style="margin:0;font-size:20px;">🚀 Deployment Notification</h2>
+                </div>
+                <div style="padding:24px;">
+                  <table style="width:100%;border-collapse:collapse;margin-top:8px;">
+                    <tr><td style="padding:6px 0;color:#555;font-weight:600;">Repository</td><td>${{ github.repository }}</td></tr>
+                    <tr style="background:#f9fafb;"><td style="padding:6px 0;color:#555;font-weight:600;">Branch</td><td>${{ github.ref_name }}</td></tr>
+                    <tr><td style="padding:6px 0;color:#555;font-weight:600;">Commit</td><td><code>${{ github.sha }}</code></td></tr>
+                    <tr style="background:#f9fafb;"><td style="padding:6px 0;color:#555;font-weight:600;">Tag</td><td>${{ steps.tag.outputs.TAG }}</td></tr>
+                    <tr><td style="padding:6px 0;color:#555;font-weight:600;">Status</td>
+                      <td><span style="padding:3px 8px;border-radius:6px;background:#2563eb;color:#fff;font-size:12px;">${{ job.status }}</span></td></tr>
+                  </table>
+                  <p style="margin:16px 0 8px;color:#444;">View full deployment logs:</p>
+                  <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                     style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:500;">🔍 View Details</a>
+                  <p style="margin-top:20px;font-size:12px;color:#888;">— DevOps Pipeline</p>
+                </div>
+              </div>
+            </div>
