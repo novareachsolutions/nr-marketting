@@ -1,34 +1,46 @@
-import '@/styles/globals.css'
-import type { AppProps } from 'next/app'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
-import { setGlobalToast, ToastInstance } from '@repo/shared-frontend'
+import '@/styles/globals.css';
+import type { AppProps } from 'next/app';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { setGlobalToast } from '@repo/shared-frontend';
+import { AuthProvider } from '@/context/AuthContext';
+import { ToastContainer, useToast } from '@/components/ui/Toast';
 
-export default function App({ Component, pageProps }: AppProps) {
-  const [queryClient] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 5 * 60 * 1000,
-        retry: false,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }))
+function InnerApp({ Component, pageProps }: AppProps) {
+  const { toasts, toast, removeToast } = useToast();
 
-  // Optional: Set up global toast (you can replace this with your toast library)
-  // Example with a simple implementation:
-  // useEffect(() => {
-  //   setGlobalToast({
-  //     success: (title, message) => console.log('Success:', title, message),
-  //     error: (title, message) => console.error('Error:', title, message),
-  //     warning: (title, message) => console.warn('Warning:', title, message),
-  //     info: (title, message) => console.info('Info:', title, message),
-  //   })
-  // }, [])
+  useEffect(() => {
+    setGlobalToast(toast);
+    return () => setGlobalToast(null);
+  }, [toast]);
+
+  return (
+    <>
+      <Component {...pageProps} />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+    </>
+  );
+}
+
+export default function App(props: AppProps) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 5 * 60 * 1000,
+            retry: false,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Component {...pageProps} />
+      <AuthProvider>
+        <InnerApp {...props} />
+      </AuthProvider>
     </QueryClientProvider>
-  )
+  );
 }

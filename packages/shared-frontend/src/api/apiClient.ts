@@ -15,9 +15,9 @@ export const setGlobalToast = (toastInstance: ToastInstance | null) => {
 
 const getBaseURL = () => {
   if (typeof window !== 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
   }
-  return process.env.API_URL || 'http://localhost:4000';
+  return process.env.API_URL || 'http://localhost:3000/api';
 };
 
 const apiClient: AxiosInstance = axios.create({
@@ -31,7 +31,7 @@ let isRefreshing = false;
 let refreshSubscribers: Array<(token: string) => void> = [];
 let hasRedirectedToLogin = false;
 
-const REFRESH_ENDPOINT = '/auth/refresh-token';
+const REFRESH_ENDPOINT = '/auth/refresh';
 
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
@@ -60,13 +60,14 @@ apiClient.interceptors.response.use(
       if (!isRefreshing) {
         isRefreshing = true;
         try {
-          const { data } = await apiClient.post<{ accessToken: string }>(REFRESH_ENDPOINT);
-          localStorage.setItem('accessToken', data.accessToken);
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${data.accessToken}`;
-          refreshSubscribers.forEach(cb => cb(data.accessToken));
+          const { data } = await apiClient.post<{ success: boolean; data: { accessToken: string } }>(REFRESH_ENDPOINT);
+          const newToken = data.data?.accessToken || (data as any).accessToken;
+          localStorage.setItem('accessToken', newToken);
+          apiClient.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+          refreshSubscribers.forEach(cb => cb(newToken));
           refreshSubscribers = [];
           if (!originalRequest.headers) originalRequest.headers = new AxiosHeaders();
-          originalRequest.headers.set('Authorization', `Bearer ${data.accessToken}`);
+          originalRequest.headers.set('Authorization', `Bearer ${newToken}`);
           return apiClient(originalRequest);
         } catch (refreshError) {
           localStorage.removeItem('accessToken');

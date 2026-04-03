@@ -1,0 +1,43 @@
+export const PLAN_LIMITS = {
+  FREE: {
+    maxProjects: 1,
+    maxTrackedKeywordsPerProject: 10,
+    maxPagesPerCrawl: 10_000,
+    maxKeywordSearchesPerDay: 10,
+    maxAiMessagesPerMonth: 10,
+    maxReportsPerMonth: 1,
+    maxCompetitorsPerProject: 2,
+    maxCrawlsPerMonth: 999,
+    whiteLabel: false,
+    maxTeamMembers: 1,
+    dataRetentionMonths: 3,
+  },
+  PRO: {
+    maxProjects: 5,
+    maxTrackedKeywordsPerProject: 100,
+    maxPagesPerCrawl: 10_000,
+    maxKeywordSearchesPerDay: 500,
+    maxAiMessagesPerMonth: 200,
+    maxReportsPerMonth: 20,
+    maxCompetitorsPerProject: 5,
+    maxCrawlsPerMonth: 10,
+    whiteLabel: false,
+    maxTeamMembers: 3,
+    dataRetentionMonths: 12,
+  },
+  AGENCY: {
+    maxProjects: 25,
+    maxTrackedKeywordsPerProject: 1_000,
+    maxPagesPerCrawl: 100_000,
+    maxKeywordSearchesPerDay: -1,
+    maxAiMessagesPerMonth: -1,
+    maxReportsPerMonth: -1,
+    maxCompetitorsPerProject: 10,
+    maxCrawlsPerMonth: 50,
+    whiteLabel: true,
+    maxTeamMembers: 10,
+    dataRetentionMonths: 24,
+  },
+} as const;
+
+export type PlanType = keyof typeof PLAN_LIMITS;

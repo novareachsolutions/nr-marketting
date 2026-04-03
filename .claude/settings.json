@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(winget install:*)",
+      "Bash(npm install:*)",
+      "Bash(pnpm add:*)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\")",
+      "WebFetch(domain:www.semrush.com)",
+      "WebSearch",
+      "Bash(pnpm --filter @repo/api add @nestjs/schedule)",
+      "Bash(pnpm --filter @repo/database db:generate)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=4096\" npx prisma generate)",
+      "Bash(node --max-old-space-size=4096 ./node_modules/.bin/prisma generate)",
+      "Bash(node --max-old-space-size=4096 ../../node_modules/.pnpm/prisma@5.22.0/node_modules/prisma/build/index.js generate)",
+      "Bash(set NODE_OPTIONS=--max-old-space-size=4096)",
+      "Bash(tasklist)",
+      "Bash(netstat -ano)",
+      "Bash(pnpm --filter tenent-dashboard add jspdf jspdf-autotable)",
+      "Bash(curl -s http://localhost:3000/health)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\AYAN RAZVI\\nr\\nr-marketting\\apps\\frontend\\tenent-dashboard\\pages\\dashboard\\projects\\[id]"
+    ]
+  }
+}

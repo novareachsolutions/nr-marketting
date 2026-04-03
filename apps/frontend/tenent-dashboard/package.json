@@ -11,20 +11,22 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@repo/shared-common": "workspace:*",
+    "@repo/shared-frontend": "workspace:*",
+    "@tanstack/react-query": "^5.17.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "next": "14.0.4",
     "react": "^18",
-    "react-dom": "^18",
-    "@tanstack/react-query": "^5.17.0",
-    "@repo/shared-frontend": "workspace:*",
-    "@repo/shared-common": "workspace:*"
+    "react-dom": "^18"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@repo/tsconfig": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@repo/tsconfig": "workspace:*",
     "eslint": "^8",
-    "eslint-config-next": "14.0.4"
+    "eslint-config-next": "14.0.4",
+    "typescript": "^5"
   }
 }

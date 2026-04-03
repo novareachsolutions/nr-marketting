@@ -1,9 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// ============================================
+// PRISMA SCHEMA - Phase 1 MVP
+// ============================================
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -11,24 +11,653 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum SubStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+}
+
+enum UsageMetric {
+  KEYWORDS_TRACKED
+  PAGES_CRAWLED
+  AI_CREDITS
+  REPORTS_GENERATED
+}
+
+enum Device {
+  DESKTOP
+  MOBILE
+}
+
+enum DataSource {
+  GSC
+  DATAFORSEO
+}
+
+enum CrawlStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum IssueDimension {
+  SEO
+  GEO
+  AEO
+}
+
+enum IssueType {
+  // ==================== SEO ISSUES ====================
+  // SEO Errors
+  MISSING_TITLE
+  MISSING_H1
+  BROKEN_INTERNAL_LINK
+  BROKEN_EXTERNAL_LINK
+  PAGE_NOT_FOUND
+  SERVER_ERROR
+  HAS_NOINDEX
+  REDIRECT_CHAIN
+  MIXED_CONTENT
+
+  // SEO Warnings
+  MISSING_META_DESCRIPTION
+  DUPLICATE_TITLE
+  DUPLICATE_META_DESCRIPTION
+  IMAGE_MISSING_ALT
+  SLOW_PAGE
+  MULTIPLE_H1
+  MISSING_CANONICAL
+  MISSING_VIEWPORT
+  MISSING_LANG
+  MISSING_OG_TAGS
+  MISSING_STRUCTURED_DATA
+  LARGE_PAGE_SIZE
+  TOO_MANY_LINKS
+  ORPHAN_PAGE
+  MISSING_OG_IMAGE
+  MISSING_TWITTER_CARD
+  NON_DESCRIPTIVE_ANCHOR
+
+  // SEO Notices
+  TITLE_TOO_LONG
+  TITLE_TOO_SHORT
+  META_DESCRIPTION_TOO_LONG
+  META_DESCRIPTION_TOO_SHORT
+  LOW_WORD_COUNT
+  LOW_INTERNAL_LINKS
+  LOW_EXTERNAL_LINKS
+  UNCOMPRESSED_IMAGES
+  URL_NOT_CLEAN
+  NO_CONTENT_DATE
+
+  // ==================== GEO ISSUES ====================
+  // GEO Errors
+  NO_AUTHOR_INFO
+  NO_ABOUT_PAGE
+  NO_CONTACT_INFO
+
+  // GEO Warnings
+  WEAK_EEAT_SIGNALS
+  NO_TRUST_SIGNALS
+  NO_ORGANIZATION_SCHEMA
+  MISSING_SOCIAL_PROFILES
+  LOW_FACTUAL_DENSITY
+  NO_SOURCE_CITATIONS
+  WEAK_ENTITY_CLARITY
+  NO_AUTHOR_SCHEMA
+  MISSING_SAMEAS_LINKS
+  AI_CRAWL_BLOCKED
+
+  // GEO Notices
+  NO_ORIGINAL_DATA
+  THIN_CONTENT_FOR_AI
+  UNCLEAR_VALUE_PROPOSITION
+  NO_CREDENTIALS_VISIBLE
+
+  // ==================== AEO ISSUES ====================
+  // AEO Errors
+  NO_FAQ_SCHEMA
+  NO_DIRECT_ANSWERS
+
+  // AEO Warnings
+  NO_QUESTION_HEADINGS
+  NO_HOWTO_SCHEMA
+  NO_SPEAKABLE_SCHEMA
+  NO_DEFINITION_PATTERN
+  NO_LIST_CONTENT
+  NO_TABLE_CONTENT
+  MISSING_FAQ_PAGE
+
+  // AEO Notices
+  LOW_QUESTION_COVERAGE
+  NOT_CONVERSATIONAL
+  NO_LOCAL_SIGNALS
+  NO_LONG_TAIL_QUESTIONS
+}
+
+enum CrawlSchedule {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum IssueSeverity {
+  ERROR
+  WARNING
+  NOTICE
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum ReportType {
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum ReportStatus {
+  PENDING
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum SourceType {
+  MANUAL
+  WORDPRESS
+  GITHUB
+}
+
+enum WpAuthMethod {
+  APP_PASSWORD
+  PLUGIN
+}
+
+enum WpSeoPlugin {
+  YOAST
+  RANKMATH
+  AIOSEO
+  NONE
+}
+
+enum DeployPlatform {
+  GITHUB_PAGES
+  VERCEL
+  NETLIFY
+  OTHER
+}
+
+// ============================================
+// AUTH & USERS
+// ============================================
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  name                String?
+  role                Role      @default(USER)
+  isEmailVerified     Boolean   @default(false) @map("is_email_verified")
+  emailVerifyToken    String?   @map("email_verify_token")
+  passwordResetToken  String?   @map("password_reset_token")
+  passwordResetExpiry DateTime? @map("password_reset_expiry")
+  avatarUrl           String?   @map("avatar_url")
+  timezone            String    @default("UTC")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  subscription     Subscription?
+  googleConnection GoogleConnection?
+  projects         Project[]
+  refreshTokens    RefreshToken[]
+  usageRecords     UsageRecord[]
 
   @@map("users")
 }
 
-model Post {
+model RefreshToken {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  userAgent String?  @map("user_agent")
+  ipAddress String?  @map("ip_address")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("posts")
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// BILLING
+// ============================================
+
+model Subscription {
+  id                   String       @id @default(cuid())
+  userId               String       @unique @map("user_id")
+  stripeCustomerId     String       @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?      @unique @map("stripe_subscription_id")
+  plan                 Plan         @default(FREE)
+  billingCycle         BillingCycle @default(MONTHLY) @map("billing_cycle")
+  status               SubStatus    @default(ACTIVE)
+  currentPeriodStart   DateTime?    @map("current_period_start")
+  currentPeriodEnd     DateTime?    @map("current_period_end")
+  cancelAtPeriodEnd    Boolean      @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model UsageRecord {
+  id        String      @id @default(cuid())
+  userId    String      @map("user_id")
+  metric    UsageMetric
+  count     Int         @default(0)
+  limit     Int
+  period    String      // "2026-03" (year-month)
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, metric, period])
+  @@index([userId, period])
+  @@map("usage_records")
+}
+
+// ============================================
+// PROJECTS
+// ============================================
+
+model Project {
+  id         String     @id @default(cuid())
+  userId     String     @map("user_id")
+  domain     String
+  name       String
+  timezone   String     @default("UTC")
+  sourceType          SourceType    @default(MANUAL) @map("source_type")
+  isActive            Boolean       @default(true) @map("is_active")
+  crawlSchedule       CrawlSchedule @default(NONE) @map("crawl_schedule")
+  lastScheduledCrawlAt DateTime?    @map("last_scheduled_crawl_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competitors         Competitor[]
+  projectKeywords     ProjectKeyword[]
+  trackedKeywords     TrackedKeyword[]
+  crawlJobs           CrawlJob[]
+  conversations       AiConversation[]
+  reports             Report[]
+  wordpressConnection WordPressConnection?
+  githubConnection    GitHubConnection?
+
+  @@unique([userId, domain])
+  @@index([userId])
+  @@map("projects")
+}
+
+model Competitor {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  domain    String
+  name      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domain])
+  @@map("competitors")
+}
+
+// ============================================
+// SOURCE INTEGRATIONS (WordPress + GitHub)
+// ============================================
+
+model WordPressConnection {
+  id             String       @id @default(cuid())
+  projectId      String       @unique @map("project_id")
+  siteUrl        String       @map("site_url")
+  username       String       // ENCRYPTED at rest
+  appPassword    String?      @map("app_password") // ENCRYPTED at rest
+  pluginApiKey   String?      @map("plugin_api_key") // ENCRYPTED at rest
+  authMethod     WpAuthMethod @map("auth_method")
+  isValid        Boolean      @default(true) @map("is_valid")
+  wpVersion      String?      @map("wp_version")
+  seoPlugin      WpSeoPlugin? @map("seo_plugin")
+  capabilities   Json?
+  lastVerifiedAt DateTime?    @map("last_verified_at")
+  connectedAt    DateTime     @default(now()) @map("connected_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("wordpress_connections")
+}
+
+model GitHubConnection {
+  id              String          @id @default(cuid())
+  projectId       String          @unique @map("project_id")
+  accessToken     String          @map("access_token") // ENCRYPTED at rest
+  repoOwner       String          @map("repo_owner")
+  repoName        String          @map("repo_name")
+  repoFullName    String          @map("repo_full_name")
+  defaultBranch   String          @default("main") @map("default_branch")
+  repoUrl         String          @map("repo_url")
+  deployUrl       String?         @map("deploy_url")
+  deployPlatform  DeployPlatform? @map("deploy_platform")
+  webhookId       String?         @map("webhook_id")
+  webhookSecret   String?         @map("webhook_secret") // ENCRYPTED at rest
+  isValid         Boolean         @default(true) @map("is_valid")
+  lastVerifiedAt  DateTime?       @map("last_verified_at")
+  connectedAt     DateTime        @default(now()) @map("connected_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("github_connections")
+}
+
+// ============================================
+// GOOGLE INTEGRATIONS
+// ============================================
+
+model GoogleConnection {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id")
+  accessToken  String   @map("access_token")
+  refreshToken String   @map("refresh_token") // ENCRYPTED at rest
+  tokenExpiry  DateTime @map("token_expiry")
+  scope        String
+  gaPropertyId String?  @map("ga_property_id")
+  gscSiteUrl   String?  @map("gsc_site_url")
+  connectedAt  DateTime @default(now()) @map("connected_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_connections")
+}
+
+// ============================================
+// KEYWORDS
+// ============================================
+
+model KeywordCache {
+  id           String   @id @default(cuid())
+  keyword      String
+  country      String   @default("US")
+  searchVolume Int?     @map("search_volume")
+  difficulty   Int?     // 0-100
+  cpc          Float?   // USD
+  trend        Json?    // 12-month volume trend array
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([keyword, country])
+  @@map("keyword_cache")
+}
+
+model ProjectKeyword {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  keyword   String
+  targetUrl String?  @map("target_url")
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, keyword])
+  @@map("project_keywords")
+}
+
+// ============================================
+// RANK TRACKING
+// ============================================
+
+model TrackedKeyword {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  keyword   String
+  targetUrl String?  @map("target_url")
+  device    Device   @default(DESKTOP)
+  country   String   @default("US")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rankingHistory RankingHistory[]
+
+  @@unique([projectId, keyword, device, country])
+  @@index([projectId])
+  @@map("tracked_keywords")
+}
+
+model RankingHistory {
+  id               String     @id @default(cuid())
+  trackedKeywordId String     @map("tracked_keyword_id")
+  position         Float?     // Average position (e.g., 7.3). Null = not ranking
+  clicks           Int        @default(0)
+  impressions      Int        @default(0)
+  ctr              Float      @default(0) // 0.0 - 1.0
+  date             DateTime
+  source           DataSource @default(GSC)
+
+  // Relations
+  trackedKeyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
+
+  @@unique([trackedKeywordId, date, source])
+  @@index([trackedKeywordId, date(sort: Desc)])
+  @@map("ranking_history")
+}
+
+// ============================================
+// SITE AUDIT
+// ============================================
+
+model CrawlJob {
+  id           String      @id @default(cuid())
+  projectId    String      @map("project_id")
+  status       CrawlStatus @default(QUEUED)
+  pagesCrawled Int         @default(0) @map("pages_crawled")
+  pagesTotal   Int         @default(0) @map("pages_total")
+  pagesLimit   Int         @map("pages_limit")
+  errorCount   Int         @default(0) @map("error_count")
+  warningCount Int         @default(0) @map("warning_count")
+  noticeCount  Int         @default(0) @map("notice_count")
+  score        Int?        // 0-100, overall health score
+  seoScore     Int?        @map("seo_score")  // 1-10 SEO dimension
+  geoScore     Int?        @map("geo_score")  // 1-10 GEO dimension
+  aeoScore     Int?        @map("aeo_score")  // 1-10 AEO dimension
+  startedAt    DateTime?   @map("started_at")
+  completedAt  DateTime?   @map("completed_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pages   CrawlPage[]
+
+  @@index([projectId])
+  @@map("crawl_jobs")
+}
+
+model CrawlPage {
+  id                 String   @id @default(cuid())
+  crawlJobId         String   @map("crawl_job_id")
+  url                String
+  statusCode         Int?     @map("status_code")
+  title              String?
+  metaDescription    String?  @map("meta_description")
+  h1                 String?
+  h1Count            Int      @default(0) @map("h1_count")
+  wordCount          Int      @default(0) @map("word_count")
+  loadTimeMs         Int?     @map("load_time_ms")
+  contentType        String?  @map("content_type")
+  canonicalUrl       String?  @map("canonical_url")
+  hasRobotsNoindex   Boolean  @default(false) @map("has_robots_noindex")
+  hasRobotsNofollow  Boolean  @default(false) @map("has_robots_nofollow")
+  internalLinksCount Int      @default(0) @map("internal_links_count")
+  externalLinksCount Int      @default(0) @map("external_links_count")
+  imagesCount        Int      @default(0) @map("images_count")
+  imagesWithoutAlt   Int      @default(0) @map("images_without_alt")
+  htmlSize           Int?     @map("html_size") // bytes
+  hasViewport        Boolean  @default(true) @map("has_viewport")
+  hasLangAttr        Boolean  @default(true) @map("has_lang_attr")
+  hasOgTags          Boolean  @default(true) @map("has_og_tags")
+  hasOgImage         Boolean  @default(false) @map("has_og_image")
+  hasTwitterCard     Boolean  @default(false) @map("has_twitter_card")
+  hasStructuredData  Boolean  @default(true) @map("has_structured_data")
+  redirectCount      Int      @default(0) @map("redirect_count")
+
+  // GEO signals
+  hasAuthorInfo      Boolean  @default(false) @map("has_author_info")
+  hasContactInfo     Boolean  @default(false) @map("has_contact_info")
+  hasTrustSignals    Boolean  @default(false) @map("has_trust_signals")
+  hasOrgSchema       Boolean  @default(false) @map("has_org_schema")
+  hasAuthorSchema    Boolean  @default(false) @map("has_author_schema")
+  hasSameAsLinks     Boolean  @default(false) @map("has_sameas_links")
+  hasCitations       Boolean  @default(false) @map("has_citations")
+  hasOriginalData    Boolean  @default(false) @map("has_original_data")
+  hasContentDate     Boolean  @default(false) @map("has_content_date")
+  socialProfileCount Int      @default(0) @map("social_profile_count")
+  schemaTypes        String?  @map("schema_types") // comma-separated: Organization,Article,FAQ
+
+  // AEO signals
+  hasFaqSchema       Boolean  @default(false) @map("has_faq_schema")
+  hasHowToSchema     Boolean  @default(false) @map("has_howto_schema")
+  hasSpeakableSchema Boolean  @default(false) @map("has_speakable_schema")
+  questionHeadingsCount Int   @default(0) @map("question_headings_count")
+  hasDefinitionPattern Boolean @default(false) @map("has_definition_pattern")
+  hasListContent     Boolean  @default(false) @map("has_list_content")
+  hasTableContent    Boolean  @default(false) @map("has_table_content")
+  directAnswerCount  Int      @default(0) @map("direct_answer_count")
+
+  crawledAt          DateTime @default(now()) @map("crawled_at")
+
+  // Relations
+  crawlJob CrawlJob     @relation(fields: [crawlJobId], references: [id], onDelete: Cascade)
+  issues   CrawlIssue[]
+
+  @@index([crawlJobId, statusCode])
+  @@map("crawl_pages")
+}
+
+model CrawlIssue {
+  id          String         @id @default(cuid())
+  crawlPageId String         @map("crawl_page_id")
+  type        IssueType
+  severity    IssueSeverity
+  dimension   IssueDimension @default(SEO)
+  message     String
+  details     Json?
+  suggestion  String?
+
+  // Relations
+  crawlPage CrawlPage @relation(fields: [crawlPageId], references: [id], onDelete: Cascade)
+
+  @@index([crawlPageId, severity])
+  @@index([crawlPageId, dimension])
+  @@map("crawl_issues")
+}
+
+// ============================================
+// AI ASSISTANT
+// ============================================
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  title     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  project  Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([projectId])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String      @id @default(cuid())
+  conversationId String      @map("conversation_id")
+  role           MessageRole
+  content        String
+  tokensUsed     Int         @default(0) @map("tokens_used")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  // Relations
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("ai_messages")
+}
+
+// ============================================
+// REPORTS
+// ============================================
+
+model Report {
+  id        String       @id @default(cuid())
+  projectId String       @map("project_id")
+  title     String
+  type      ReportType   @default(WEEKLY)
+  dateFrom  DateTime     @map("date_from")
+  dateTo    DateTime     @map("date_to")
+  filePath  String?      @map("file_path")
+  fileSize  Int?         @map("file_size")
+  status    ReportStatus @default(PENDING)
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("reports")
 }

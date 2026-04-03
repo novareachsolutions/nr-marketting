@@ -1,0 +1,47 @@
+.main { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+.title { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 24px; }
+
+.section { background: var(--bg-card); border: 1px solid var(--border-primary); border-radius: var(--radius-lg); margin-bottom: 24px; }
+.sectionHeader { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border-primary); }
+.sectionTitle { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.sectionBody { padding: 20px; }
+
+.statusRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.statusLabel { font-size: 13px; color: var(--text-secondary); }
+.statusBadge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-full); }
+.connected { background: var(--accent-success-light); color: var(--accent-success); }
+.disconnected { background: var(--bg-tertiary); color: var(--text-tertiary); }
+
+.infoGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.infoItem { display: flex; flex-direction: column; gap: 2px; }
+.infoLabel { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+.infoValue { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+
+.form { display: flex; flex-direction: column; gap: 14px; }
+.formRow { display: flex; flex-direction: column; gap: 4px; }
+.formLabel { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.formInput { height: 38px; padding: 0 12px; font-size: 13px; color: var(--text-primary); background: var(--bg-input); border: 1px solid var(--border-input); border-radius: var(--radius-md); outline: none; transition: all var(--transition-fast); }
+.formInput:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-primary-light); }
+.formInput::placeholder { color: var(--text-tertiary); }
+.formSelect { composes: formInput; cursor: pointer; }
+
+.btnRow { display: flex; gap: 10px; margin-top: 4px; }
+.connectBtn { height: 36px; padding: 0 18px; border: none; border-radius: var(--radius-md); background: var(--accent-primary); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast); }
+.connectBtn:hover:not(:disabled) { background: var(--accent-primary-hover); }
+.connectBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.disconnectBtn { height: 36px; padding: 0 18px; border: 1px solid var(--accent-danger); border-radius: var(--radius-md); background: transparent; color: var(--accent-danger); font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast); }
+.disconnectBtn:hover { background: var(--accent-danger); color: #fff; }
+
+.alert { padding: 10px 14px; border-radius: var(--radius-md); font-size: 13px; margin-bottom: 12px; }
+.alertError { composes: alert; background: var(--accent-danger-light); color: var(--accent-danger); border: 1px solid var(--accent-danger); }
+.alertSuccess { composes: alert; background: var(--accent-success-light); color: var(--accent-success); border: 1px solid var(--accent-success); }
+
+.repoList { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.repoItem { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--border-primary); border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-fast); }
+.repoItem:hover { border-color: var(--border-focus); background: var(--bg-hover); }
+.repoItemSelected { composes: repoItem; border-color: var(--accent-primary); background: var(--accent-primary-light); }
+.repoName { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.repoBranch { font-size: 11px; color: var(--text-tertiary); }
+.repoPrivate { font-size: 10px; padding: 2px 6px; border-radius: var(--radius-full); background: var(--accent-warning-light); color: var(--accent-warning); }
+
+.loading { text-align: center; padding: 32px; color: var(--text-tertiary); font-size: 14px; }
