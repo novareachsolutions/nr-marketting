@@ -37,6 +37,7 @@ export function Sidebar({ projectId }: SidebarProps) {
   const mainLinks: SidebarLink[] = [
     { href: '/dashboard', icon: '🏠', label: 'Dashboard', match: '/dashboard' },
     { href: '/dashboard/keywords', icon: '🔍', label: 'Keyword Research', match: '/dashboard/keywords' },
+    { href: '/dashboard/domain-overview', icon: '🌐', label: 'Domain Overview', match: '/dashboard/domain-overview' },
     { href: '/billing', icon: '💳', label: 'Billing & Plans', match: '/billing' },
     { href: '/settings/integrations', icon: '🔗', label: 'Integrations', match: '/settings' },
   ];
@@ -54,6 +55,12 @@ export function Sidebar({ projectId }: SidebarProps) {
           icon: '🔑',
           label: 'Keywords',
           match: `/dashboard/projects/${projectId}/keywords`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/position-tracking`,
+          icon: '📍',
+          label: 'Position Tracking',
+          match: `/dashboard/projects/${projectId}/position-tracking`,
         },
         {
           href: `/dashboard/projects/${projectId}/audits`,

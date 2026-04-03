@@ -94,7 +94,7 @@ function KeywordResearchContent() {
   );
 
   const { data: suggestionsData, isLoading: isLoadingSuggestions } =
-    useKeywordSuggestions(activeQuery, country, 50, sugPage, showSuggestions, hasActiveFilters ? filters : undefined);
+    useKeywordSuggestions(activeQuery, country, 10, sugPage, showSuggestions, hasActiveFilters ? filters : undefined);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -428,11 +428,11 @@ function KeywordResearchContent() {
                   </div>
 
                   {/* Pagination */}
-                  {suggestionsData.total > 50 && (
+                  {suggestionsData.total > 10 && (
                     <div className={styles.pagination}>
                       <button className={styles.pageBtn} disabled={sugPage <= 1} onClick={() => setSugPage((p) => p - 1)}>Previous</button>
-                      <span className={styles.pageInfo}>Page {sugPage} of {Math.ceil(suggestionsData.total / 50)}</span>
-                      <button className={styles.pageBtn} disabled={sugPage >= Math.ceil(suggestionsData.total / 50)} onClick={() => setSugPage((p) => p + 1)}>Next</button>
+                      <span className={styles.pageInfo}>Page {sugPage} of {Math.ceil(suggestionsData.total / 10)}</span>
+                      <button className={styles.pageBtn} disabled={sugPage >= Math.ceil(suggestionsData.total / 10)} onClick={() => setSugPage((p) => p + 1)}>Next</button>
                     </div>
                   )}
                 </>

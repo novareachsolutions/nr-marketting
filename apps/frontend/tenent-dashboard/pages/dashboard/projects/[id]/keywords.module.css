@@ -318,10 +318,239 @@
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
 }
 
+/* ─── Inline Research ─────────────────────────────────── */
+.researchSection {
+  margin-bottom: 28px;
+}
+
+.inlineSearch {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.inlineInput {
+  flex: 1;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.inlineInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.inlineSearchBtn {
+  height: 38px;
+  padding: 0 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inlineSearchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.domainSuggestBtn {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.domainSuggestBtn:hover:not(:disabled) {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.domainSuggestBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Search result card */
+.searchResultCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.searchResultHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.searchResultMetrics {
+  display: flex;
+  gap: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.searchResultActions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Suggestions card */
+.suggestionsCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.suggestionsTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 14px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sugTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sugTable thead th {
+  padding: 8px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.sugTable tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+}
+
+.sugTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.sugTable tbody tr:hover {
+  background: var(--bg-hover);
+}
+
+/* Intent tag */
+.intentTag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Question tag */
+.qTag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  font-size: 9px;
+  font-weight: 700;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* Small buttons */
+.saveBtnSm {
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.saveBtnSm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.suggestBtnSm {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.suggestBtnSm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ─── Loading ──────────────────────────────────────────── */
 .loading {
   text-align: center;
   padding: 48px;
   color: var(--text-tertiary);
   font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .inlineSearch {
+    flex-wrap: wrap;
+  }
+
+  .inlineInput {
+    min-width: 100%;
+  }
+
+  .searchResultMetrics {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
 }

@@ -15,6 +15,8 @@ import { SiteAuditModule } from './site-audit/site-audit.module';
 import { GitHubModule } from './github/github.module';
 import { WordPressModule } from './wordpress/wordpress.module';
 import { AutoFixModule } from './auto-fix/auto-fix.module';
+import { PositionTrackingModule } from './position-tracking/position-tracking.module';
+import { DomainOverviewModule } from './domain-overview/domain-overview.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { AutoFixModule } from './auto-fix/auto-fix.module';
     GitHubModule,
     WordPressModule,
     AutoFixModule,
+    PositionTrackingModule,
+    DomainOverviewModule,
   ],
   controllers: [AppController],
   providers: [

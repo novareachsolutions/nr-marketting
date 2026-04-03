@@ -1,0 +1,410 @@
+.layout {
+  min-height: 100vh;
+  background: var(--bg-secondary);
+}
+
+/* ─── Main ─────────────────────────────────────────────── */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.pageTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+/* ─── Search Form ──────────────────────────────────────── */
+.searchForm {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+}
+
+.searchInput {
+  flex: 1;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.searchInput:focus {
+  border-color: var(--accent-primary);
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.countrySelect {
+  width: 70px;
+  height: 44px;
+  padding: 0 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.searchBtn {
+  height: 44px;
+  padding: 0 24px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.searchBtn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.searchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Loading / Empty States ──────────────────────────── */
+.loadingState {
+  text-align: center;
+  padding: 64px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.errorState {
+  text-align: center;
+  padding: 32px;
+  color: var(--accent-danger);
+  font-size: 14px;
+}
+
+/* ─── Authority Section ───────────────────────────────── */
+.authoritySection {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.authorityGauge {
+  flex-shrink: 0;
+}
+
+.authorityInfo {
+  flex: 1;
+}
+
+.authorityLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.authorityDomain {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.authorityTrendBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 32px;
+}
+
+.authorityTrendBar {
+  width: 12px;
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.authorityTrendBar:hover {
+  opacity: 1;
+}
+
+/* ─── Metrics Grid ────────────────────────────────────── */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.metricCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.metricCardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.metricRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.metricRow + .metricRow {
+  border-top: 1px solid var(--border-primary);
+}
+
+.metricLabel {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.metricValue {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.metricValueLg {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* ─── Backlink Ratio Bar ──────────────────────────────── */
+.ratioBarWrap {
+  margin-top: 8px;
+}
+
+.ratioBar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.ratioFollow {
+  background: var(--accent-success);
+}
+
+.ratioNofollow {
+  background: var(--accent-warning);
+}
+
+.ratioLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ─── Charts Section ──────────────────────────────────── */
+.chartSection {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.chartsRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* ─── Data Tables ─────────────────────────────────────── */
+.tableSection {
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.tableSectionHeader {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.tableSectionTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.table td {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.table tbody tr:hover {
+  background: var(--bg-secondary);
+}
+
+.kwCell {
+  font-weight: 500;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.urlCell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-link);
+  font-size: 12px;
+}
+
+.positionBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ─── Country Distribution ────────────────────────────── */
+.countryRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.countryRow + .countryRow {
+  border-top: 1px solid var(--border-primary);
+}
+
+.countryCode {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 28px;
+}
+
+.countryBarWrap {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.countryBar {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 4px;
+  transition: width var(--transition-base);
+}
+
+.countryPercent {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ─── Intent Colors ───────────────────────────────────── */
+.intentDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+/* ─── Responsive ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .metricsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .chartsRow {
+    grid-template-columns: 1fr;
+  }
+
+  .searchForm {
+    flex-wrap: wrap;
+  }
+
+  .searchInput {
+    min-width: 100%;
+  }
+
+  .authoritySection {
+    flex-direction: column;
+    text-align: center;
+  }
+}

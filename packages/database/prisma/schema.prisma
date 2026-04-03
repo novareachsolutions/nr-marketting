@@ -44,6 +44,7 @@ enum UsageMetric {
   PAGES_CRAWLED
   AI_CREDITS
   REPORTS_GENERATED
+  DOMAIN_OVERVIEWS
 }
 
 enum Device {
@@ -317,6 +318,8 @@ model Project {
   isActive            Boolean       @default(true) @map("is_active")
   crawlSchedule       CrawlSchedule @default(NONE) @map("crawl_schedule")
   lastScheduledCrawlAt DateTime?    @map("last_scheduled_crawl_at")
+  rankCheckSchedule   CrawlSchedule @default(NONE) @map("rank_check_schedule")
+  lastRankCheckAt     DateTime?     @map("last_rank_check_at")
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
@@ -325,6 +328,7 @@ model Project {
   competitors         Competitor[]
   projectKeywords     ProjectKeyword[]
   trackedKeywords     TrackedKeyword[]
+  keywordTags         KeywordTag[]
   crawlJobs           CrawlJob[]
   conversations       AiConversation[]
   reports             Report[]
@@ -456,22 +460,70 @@ model ProjectKeyword {
 }
 
 // ============================================
+// DOMAIN OVERVIEW CACHE
+// ============================================
+
+model DomainOverviewCache {
+  id                   String   @id @default(cuid())
+  domain               String
+  country              String   @default("US")
+
+  // Authority
+  authorityScore       Int?     @map("authority_score")
+  authorityTrend       Json?    @map("authority_trend")
+
+  // Organic Search
+  organicKeywords      Int?     @map("organic_keywords")
+  organicTraffic       Int?     @map("organic_traffic")
+  organicTrafficCost   Float?   @map("organic_traffic_cost")
+  organicTrafficTrend  Json?    @map("organic_traffic_trend")
+
+  // Paid Search
+  paidKeywords         Int?     @map("paid_keywords")
+  paidTraffic          Int?     @map("paid_traffic")
+  paidTrafficCost      Float?   @map("paid_traffic_cost")
+
+  // Backlinks
+  totalBacklinks       Int?     @map("total_backlinks")
+  referringDomains     Int?     @map("referring_domains")
+  followBacklinks      Int?     @map("follow_backlinks")
+  nofollowBacklinks    Int?     @map("nofollow_backlinks")
+
+  // Distributions
+  intentDistribution   Json?    @map("intent_distribution")
+  positionDistribution Json?    @map("position_distribution")
+
+  // Top Data (JSON arrays)
+  topOrganicKeywords   Json?    @map("top_organic_keywords")
+  topOrganicPages      Json?    @map("top_organic_pages")
+  topCompetitors       Json?    @map("top_competitors")
+  countryDistribution  Json?    @map("country_distribution")
+
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@unique([domain, country])
+  @@map("domain_overview_cache")
+}
+
+// ============================================
 // RANK TRACKING
 // ============================================
 
 model TrackedKeyword {
-  id        String   @id @default(cuid())
-  projectId String   @map("project_id")
-  keyword   String
-  targetUrl String?  @map("target_url")
-  device    Device   @default(DESKTOP)
-  country   String   @default("US")
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  keyword      String
+  targetUrl    String?  @map("target_url")
+  device       Device   @default(DESKTOP)
+  country      String   @default("US")
+  searchVolume Int?     @map("search_volume")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   // Relations
-  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   rankingHistory RankingHistory[]
+  tags           TrackedKeywordTag[]
 
   @@unique([projectId, keyword, device, country])
   @@index([projectId])
@@ -485,6 +537,8 @@ model RankingHistory {
   clicks           Int        @default(0)
   impressions      Int        @default(0)
   ctr              Float      @default(0) // 0.0 - 1.0
+  rankingUrl       String?    @map("ranking_url")
+  serpFeatures     String?    @map("serp_features") // comma-separated: "featured_snippet,sitelinks"
   date             DateTime
   source           DataSource @default(GSC)
 
@@ -494,6 +548,38 @@ model RankingHistory {
   @@unique([trackedKeywordId, date, source])
   @@index([trackedKeywordId, date(sort: Desc)])
   @@map("ranking_history")
+}
+
+// ============================================
+// KEYWORD TAGS (Position Tracking)
+// ============================================
+
+model KeywordTag {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  name      String
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project         Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackedKeywords TrackedKeywordTag[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@map("keyword_tags")
+}
+
+model TrackedKeywordTag {
+  trackedKeywordId String @map("tracked_keyword_id")
+  tagId            String @map("tag_id")
+
+  // Relations
+  trackedKeyword TrackedKeyword @relation(fields: [trackedKeywordId], references: [id], onDelete: Cascade)
+  tag            KeywordTag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([trackedKeywordId, tagId])
+  @@map("tracked_keyword_tags")
 }
 
 // ============================================

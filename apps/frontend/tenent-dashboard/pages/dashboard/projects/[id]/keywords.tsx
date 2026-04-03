@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -6,9 +6,101 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
-import { useProjectKeywords, useRemoveKeyword } from '@/hooks/useKeywords';
+import {
+  useProjectKeywords,
+  useRemoveKeyword,
+  useKeywordSearch,
+  useKeywordSuggestions,
+  useSaveKeyword,
+} from '@/hooks/useKeywords';
 import { showSuccessToast } from '@repo/shared-frontend';
+import type { KeywordSuggestion, SearchIntent } from '@/types/keyword';
 import styles from './keywords.module.css';
+
+function getDifficultyColor(d: number | null): string {
+  if (d === null) return 'var(--text-tertiary)';
+  if (d < 25) return '#22c55e';
+  if (d < 50) return '#eab308';
+  if (d < 75) return '#f97316';
+  return '#ef4444';
+}
+
+function formatVolume(v: number | null): string {
+  if (v === null) return '--';
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toString();
+}
+
+const INTENT_COLORS: Record<SearchIntent, string> = {
+  INFORMATIONAL: '#3b82f6',
+  NAVIGATIONAL: '#8b5cf6',
+  COMMERCIAL: '#f59e0b',
+  TRANSACTIONAL: '#22c55e',
+};
+
+const INTENT_LABELS: Record<SearchIntent, string> = {
+  INFORMATIONAL: 'I',
+  NAVIGATIONAL: 'N',
+  COMMERCIAL: 'C',
+  TRANSACTIONAL: 'T',
+};
+
+function SuggestionsTable({ title, keywords, savingKeyword, onSave }: {
+  title: string;
+  keywords: KeywordSuggestion[];
+  savingKeyword: string | null;
+  onSave: (keyword: string) => void;
+}) {
+  return (
+    <div className={styles.suggestionsCard}>
+      <h4 className={styles.suggestionsTitle}>{title}</h4>
+      <table className={styles.sugTable}>
+        <thead>
+          <tr>
+            <th>Keyword</th>
+            <th>Intent</th>
+            <th>Volume</th>
+            <th>KD%</th>
+            <th>CPC</th>
+            <th>Priority</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {keywords.map((kw, i) => (
+            <tr key={i}>
+              <td className={styles.kwCell}>
+                {kw.keyword}
+                {kw.isQuestion && <span className={styles.qTag}>Q</span>}
+              </td>
+              <td>
+                <span className={styles.intentTag} style={{ backgroundColor: INTENT_COLORS[kw.intent] }}>
+                  {INTENT_LABELS[kw.intent]}
+                </span>
+              </td>
+              <td>{formatVolume(kw.searchVolume)}</td>
+              <td>
+                <span style={{ color: getDifficultyColor(kw.difficulty) }}>{kw.difficulty ?? '--'}</span>
+              </td>
+              <td>{kw.cpc !== null ? `$${kw.cpc.toFixed(2)}` : '--'}</td>
+              <td><strong>{kw.priorityScore}</strong></td>
+              <td>
+                <button
+                  className={styles.saveBtnSm}
+                  onClick={() => onSave(kw.keyword)}
+                  disabled={savingKeyword === kw.keyword}
+                >
+                  {savingKeyword === kw.keyword ? '...' : 'Save'}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function ProjectKeywordsContent() {
   const router = useRouter();
@@ -19,15 +111,34 @@ function ProjectKeywordsContent() {
   const [page, setPage] = useState(1);
   const { data: kwData, isLoading: kwLoading } = useProjectKeywords(id, page);
   const removeKeyword = useRemoveKeyword();
+  const saveKeyword = useSaveKeyword();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [savingKeyword, setSavingKeyword] = useState<string | null>(null);
+
+  // Inline research state
+  const [searchInput, setSearchInput] = useState('');
+  const [activeQuery, setActiveQuery] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showDomainSuggestions, setShowDomainSuggestions] = useState(false);
+
+  // Domain-based suggestion: use project domain as seed keyword
+  const domainSeed = project?.domain
+    ? project.domain.replace(/\.(com|org|net|io|co|au|uk|com\.au)$/i, '').replace(/^www\./, '').replace(/[-_.]/g, ' ').trim()
+    : '';
+
+  const { data: domainSuggestionsData, isLoading: isDomainLoading } =
+    useKeywordSuggestions(domainSeed, 'US', 10, 1, showDomainSuggestions && !!domainSeed);
+
+  const { data: searchData, isLoading: isSearching } = useKeywordSearch(activeQuery, 'US');
+
+  const { data: searchSuggestionsData, isLoading: isSugLoading } =
+    useKeywordSuggestions(activeQuery, 'US', 10, 1, showSuggestions && !!activeQuery);
 
   const handleDelete = async (keywordId: string) => {
     setDeletingId(keywordId);
     try {
-      await removeKeyword.mutateAsync(
-        `/projects/${id}/keywords/${keywordId}`,
-      );
+      await removeKeyword.mutateAsync(`/projects/${id}/keywords/${keywordId}`);
       showSuccessToast('Removed', 'Keyword removed from project');
       queryClient.invalidateQueries({ queryKey: ['project-keywords', id] });
     } catch {
@@ -35,6 +146,29 @@ function ProjectKeywordsContent() {
     } finally {
       setDeletingId(null);
     }
+  };
+
+  const handleSave = async (keyword: string) => {
+    setSavingKeyword(keyword);
+    try {
+      await saveKeyword.mutateAsync({
+        url: `/projects/${id}/keywords`,
+        body: { keyword },
+      });
+      showSuccessToast('Saved', `"${keyword}" added to project`);
+      queryClient.invalidateQueries({ queryKey: ['project-keywords', id] });
+    } catch {
+      // handled by global toast
+    } finally {
+      setSavingKeyword(null);
+    }
+  };
+
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault();
+    if (!searchInput.trim()) return;
+    setActiveQuery(searchInput.trim());
+    setShowSuggestions(false);
   };
 
   if (projectLoading || !project) {
@@ -59,6 +193,76 @@ function ProjectKeywordsContent() {
             <Link href="/dashboard/keywords" className={styles.researchBtn}>
               Keyword Research
             </Link>
+          </div>
+
+          {/* Inline Keyword Research */}
+          <div className={styles.researchSection}>
+            <form className={styles.inlineSearch} onSubmit={handleSearch}>
+              <input
+                className={styles.inlineInput}
+                type="text"
+                placeholder={`Search keywords for ${project.domain}...`}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+              <button type="submit" className={styles.inlineSearchBtn} disabled={!searchInput.trim() || isSearching}>
+                {isSearching ? 'Searching...' : 'Search'}
+              </button>
+              <button
+                type="button"
+                className={styles.domainSuggestBtn}
+                onClick={() => setShowDomainSuggestions(true)}
+                disabled={isDomainLoading || !domainSeed}
+              >
+                {isDomainLoading ? 'Loading...' : `Suggest for ${project.domain}`}
+              </button>
+            </form>
+
+            {/* Search result card */}
+            {searchData && (
+              <div className={styles.searchResultCard}>
+                <div className={styles.searchResultHeader}>
+                  <strong>{searchData.keyword}</strong>
+                  <span className={styles.intentTag} style={{ backgroundColor: INTENT_COLORS[searchData.intent] }}>
+                    {INTENT_LABELS[searchData.intent]}
+                  </span>
+                </div>
+                <div className={styles.searchResultMetrics}>
+                  <span>Vol: <strong>{formatVolume(searchData.searchVolume)}</strong></span>
+                  <span>KD: <strong style={{ color: getDifficultyColor(searchData.difficulty) }}>{searchData.difficulty ?? '--'}</strong></span>
+                  <span>CPC: <strong>{searchData.cpc !== null ? `$${searchData.cpc.toFixed(2)}` : '--'}</strong></span>
+                  <span>Priority: <strong>{searchData.priorityScore}</strong></span>
+                </div>
+                <div className={styles.searchResultActions}>
+                  <button className={styles.saveBtnSm} onClick={() => handleSave(searchData.keyword)} disabled={savingKeyword === searchData.keyword}>
+                    {savingKeyword === searchData.keyword ? 'Saving...' : 'Save'}
+                  </button>
+                  <button className={styles.suggestBtnSm} onClick={() => setShowSuggestions(true)} disabled={isSugLoading}>
+                    {isSugLoading ? 'Loading...' : 'Get Suggestions'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Search suggestions */}
+            {showSuggestions && searchSuggestionsData && searchSuggestionsData.keywords.length > 0 && (
+              <SuggestionsTable
+                title={`Suggestions for "${activeQuery}"`}
+                keywords={searchSuggestionsData.keywords}
+                savingKeyword={savingKeyword}
+                onSave={handleSave}
+              />
+            )}
+
+            {/* Domain-based suggestions */}
+            {showDomainSuggestions && domainSuggestionsData && domainSuggestionsData.keywords.length > 0 && (
+              <SuggestionsTable
+                title={`Suggested keywords for ${project.domain}`}
+                keywords={domainSuggestionsData.keywords}
+                savingKeyword={savingKeyword}
+                onSave={handleSave}
+              />
+            )}
           </div>
 
           {kwLoading ? (
