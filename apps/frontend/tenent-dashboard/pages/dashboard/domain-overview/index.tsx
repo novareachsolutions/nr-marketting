@@ -2,6 +2,8 @@ import { useState } from 'react';
 import Head from 'next/head';
 import dynamic from 'next/dynamic';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
+import { AiInsights } from '@/components/ui/AiInsights';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useDomainOverview } from '@/hooks/useDomainOverview';
 import type { DomainOverviewData } from '@/types/domain-overview';
@@ -150,6 +152,7 @@ function DomainOverviewContent() {
   const [searchInput, setSearchInput] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [country, setCountry] = useState('AU');
+  const [showGuide, setShowGuide] = useState(false);
 
   const { data, isLoading, error } = useDomainOverview(activeQuery, country);
 
@@ -168,7 +171,40 @@ function DomainOverviewContent() {
       <Sidebar />
       <div className={sidebarStyles.contentWithSidebar}>
         <main className={styles.main}>
-          <h1 className={styles.pageTitle}>Domain Overview</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <h1 className={styles.pageTitle} style={{ marginBottom: 0 }}>Domain Overview</h1>
+            <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+          </div>
+
+          <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Domain Overview — Guide">
+            <h4>What is Domain Overview?</h4>
+            <p>Get a complete SEO snapshot of any domain in seconds. Enter any website and see its authority score, organic/paid traffic, backlinks, keyword distributions, top pages, competitors, and traffic by country.</p>
+
+            <h4>How to use it</h4>
+            <ul>
+              <li><strong>Enter a domain</strong> — Type any domain (e.g. google.com) and click Analyze.</li>
+              <li><strong>Review authority score</strong> — The circular gauge shows overall domain strength (0-100).</li>
+              <li><strong>Check traffic metrics</strong> — Three cards show organic search, paid search, and backlinks data.</li>
+              <li><strong>Explore trends</strong> — The traffic trend chart shows 12-month organic traffic history.</li>
+              <li><strong>Analyze competitors</strong> — See the top competing domains and their metrics.</li>
+            </ul>
+
+            <h4>Key metrics explained</h4>
+            <ul>
+              <li><strong>Authority Score (0-100)</strong> — Overall domain quality. Higher = more authoritative.</li>
+              <li><strong>Organic Traffic</strong> — Estimated monthly visitors from organic search.</li>
+              <li><strong>Traffic Cost</strong> — Dollar value of organic traffic if you had to pay for it via ads.</li>
+              <li><strong>Backlinks</strong> — Total links pointing to the domain. Follow links pass SEO value.</li>
+              <li><strong>Referring Domains</strong> — Unique domains linking to the site (more important than total backlinks).</li>
+            </ul>
+
+            <h4>Pro tips</h4>
+            <ul>
+              <li>Use this to quickly evaluate any competitor or potential partner site.</li>
+              <li>Compare the authority score with your own domain to gauge competitive distance.</li>
+              <li>Check the intent distribution to understand what type of content drives their traffic.</li>
+            </ul>
+          </GuideModal>
 
           {/* Search Form */}
           <form className={styles.searchForm} onSubmit={handleSearch}>
@@ -220,6 +256,8 @@ function DomainOverviewContent() {
           {/* Results */}
           {data && !isLoading && (
             <>
+              <AiInsights module="domain-overview" context={{ domain: data.domain, authorityScore: data.authorityScore, organicKeywords: data.organicKeywords, organicTraffic: data.organicTraffic, organicTrafficCost: data.organicTrafficCost, totalBacklinks: data.totalBacklinks, referringDomains: data.referringDomains }} />
+
               {/* Authority Score */}
               <div className={styles.authoritySection}>
                 <AuthorityGauge score={data.authorityScore} />

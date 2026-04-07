@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
 import {
@@ -109,6 +110,7 @@ function ProjectKeywordsContent() {
 
   const { data: project, isLoading: projectLoading } = useProject(id);
   const [page, setPage] = useState(1);
+  const [showGuide, setShowGuide] = useState(false);
   const { data: kwData, isLoading: kwLoading } = useProjectKeywords(id, page);
   const removeKeyword = useRemoveKeyword();
   const saveKeyword = useSaveKeyword();
@@ -184,16 +186,39 @@ function ProjectKeywordsContent() {
       <div className={sidebarStyles.contentWithSidebar}>
         <main className={styles.main}>
           <div className={styles.pageHeader}>
-            <h1 className={styles.pageTitle}>
-              Saved Keywords
-              {kwData && (
-                <span className={styles.countBadge}>{kwData.total}</span>
-              )}
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h1 className={styles.pageTitle}>
+                Saved Keywords
+                {kwData && (
+                  <span className={styles.countBadge}>{kwData.total}</span>
+                )}
+              </h1>
+              <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+            </div>
             <Link href="/dashboard/keywords" className={styles.researchBtn}>
               Keyword Research
             </Link>
           </div>
+
+          <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Project Keywords — Guide">
+            <h4>What are Project Keywords?</h4>
+            <p>This is your project's keyword library. Keywords you save here form the foundation of your SEO strategy for this domain.</p>
+
+            <h4>How to use it</h4>
+            <ul>
+              <li><strong>Search & save</strong> — Use the inline search bar to find keywords. Click Save to add them to your project.</li>
+              <li><strong>Domain suggestions</strong> — Click "Suggest for domain" to get keyword ideas based on your project's domain name.</li>
+              <li><strong>Manage keywords</strong> — View all saved keywords with their metrics. Remove keywords you no longer need.</li>
+              <li><strong>Go to Keyword Research</strong> — Click the button to access the full keyword research tool.</li>
+            </ul>
+
+            <h4>Pro tips</h4>
+            <ul>
+              <li>Save 10-20 core keywords per project to build your tracking list.</li>
+              <li>Use domain suggestions to discover keywords you might be missing.</li>
+              <li>Saved keywords can be imported into Position Tracking for daily rank monitoring.</li>
+            </ul>
+          </GuideModal>
 
           {/* Inline Keyword Research */}
           <div className={styles.researchSection}>

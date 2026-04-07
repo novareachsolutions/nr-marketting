@@ -3,8 +3,9 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/context/AuthContext';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
+import { SuggestCompetitors } from '@/components/ui/SuggestCompetitors';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import {
   useProject,
@@ -19,7 +20,6 @@ import styles from './[id].module.css';
 function ProjectDetailContent() {
   const router = useRouter();
   const { id } = router.query as { id: string };
-  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: project, isLoading } = useProject(id);
@@ -31,13 +31,8 @@ function ProjectDetailContent() {
   const [newDomain, setNewDomain] = useState('');
   const [newName, setNewName] = useState('');
   const [addError, setAddError] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
-  const planMaxCompetitors: Record<string, number> = {
-    FREE: 2,
-    PRO: 5,
-    AGENCY: 10,
-  };
-  const maxComp = planMaxCompetitors[user?.plan || 'FREE'] || 2;
 
   const handleAddCompetitor = async (e: FormEvent) => {
     e.preventDefault();
@@ -102,9 +97,32 @@ function ProjectDetailContent() {
       <div className={sidebarStyles.contentWithSidebar}>
         <main className={styles.main}>
           <div style={{ marginBottom: 24 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{project.name}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{project.name}</h1>
+              <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+            </div>
             <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{project.domain}</span>
           </div>
+
+          <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Project Overview — Guide">
+            <h4>What is the Project Overview?</h4>
+            <p>This is your project's home page. It shows a summary of all SEO data for your domain — keywords saved, audits run, competitors tracked, and reports generated.</p>
+
+            <h4>What you can do here</h4>
+            <ul>
+              <li><strong>View stats</strong> — Quick counts of keywords, tracked keywords, audits, competitors, and reports.</li>
+              <li><strong>Manage competitors</strong> — Add competitor domains to compare against in keyword gap and other tools.</li>
+              <li><strong>View settings</strong> — See project domain, source type, timezone, and status.</li>
+              <li><strong>Navigate</strong> — Use the sidebar to jump to Keywords, Site Audit, or Position Tracking.</li>
+            </ul>
+
+            <h4>Pro tips</h4>
+            <ul>
+              <li>Add 2-3 competitors to unlock keyword gap analysis within your project.</li>
+              <li>Use the sidebar navigation to access all project-specific tools.</li>
+            </ul>
+          </GuideModal>
+
           {/* Stats */}
           <div className={styles.statsRow}>
             <div className={styles.statCard}>
@@ -145,7 +163,7 @@ function ProjectDetailContent() {
               <div>
                 <span className={styles.sectionTitle}>Competitors</span>
                 <span className={styles.sectionCount}>
-                  {competitors?.length ?? 0} / {maxComp}
+                  {competitors?.length ?? 0}
                 </span>
               </div>
             </div>
@@ -177,8 +195,11 @@ function ProjectDetailContent() {
               </div>
             )}
 
-            {(competitors?.length ?? 0) < maxComp && (
-              <form className={styles.addForm} onSubmit={handleAddCompetitor}>
+            <div style={{ padding: '0 20px 16px' }}>
+              <SuggestCompetitors projectId={id} domain={project.domain} />
+            </div>
+
+            <form className={styles.addForm} onSubmit={handleAddCompetitor}>
                 <input
                   className={styles.addInput}
                   type="text"
@@ -202,7 +223,6 @@ function ProjectDetailContent() {
                   {addCompetitor.isPending ? 'Adding...' : 'Add'}
                 </button>
               </form>
-            )}
             {addError && (
               <div
                 style={{

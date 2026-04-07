@@ -17,6 +17,12 @@ import { WordPressModule } from './wordpress/wordpress.module';
 import { AutoFixModule } from './auto-fix/auto-fix.module';
 import { PositionTrackingModule } from './position-tracking/position-tracking.module';
 import { DomainOverviewModule } from './domain-overview/domain-overview.module';
+import { OrganicRankingsModule } from './organic-rankings/organic-rankings.module';
+import { TopPagesModule } from './top-pages/top-pages.module';
+import { CompareDomainsModule } from './compare-domains/compare-domains.module';
+import { KeywordGapModule } from './keyword-gap/keyword-gap.module';
+import { BacklinkGapModule } from './backlink-gap/backlink-gap.module';
+import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
 
 @Module({
   imports: [
@@ -42,6 +48,12 @@ import { DomainOverviewModule } from './domain-overview/domain-overview.module';
     AutoFixModule,
     PositionTrackingModule,
     DomainOverviewModule,
+    OrganicRankingsModule,
+    TopPagesModule,
+    CompareDomainsModule,
+    KeywordGapModule,
+    BacklinkGapModule,
+    AiSuggestionsModule,
   ],
   controllers: [AppController],
   providers: [

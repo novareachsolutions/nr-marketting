@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import {
   usePositionTrackingOverview,
@@ -53,6 +54,7 @@ function PositionTrackingContent() {
   const queryClient = useQueryClient();
 
   const [checkingNow, setCheckingNow] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [trendDays, setTrendDays] = useState(30);
 
   const { data: overview, isLoading: overviewLoading } = usePositionTrackingOverview(projectId);
@@ -114,7 +116,40 @@ function PositionTrackingContent() {
         {/* Header */}
         <div className={styles.header}>
           <div>
-            <h1 className={styles.title}>Position Tracking</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h1 className={styles.title}>Position Tracking</h1>
+              <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+            </div>
+
+            <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Position Tracking — Guide">
+              <h4>What is Position Tracking?</h4>
+              <p>Monitor your keyword rankings in Google over time. Add keywords you want to track and see daily position changes, visibility score, estimated traffic, and ranking distribution.</p>
+
+              <h4>How to use it</h4>
+              <ul>
+                <li><strong>Add keywords</strong> — Go to the Rankings Table to add keywords manually or import from your project.</li>
+                <li><strong>Check rankings</strong> — Click "Check Now" to trigger a manual rank check, or set a schedule (Daily/Weekly/Monthly).</li>
+                <li><strong>Monitor trends</strong> — The visibility trend chart shows your overall ranking strength over time.</li>
+                <li><strong>View distribution</strong> — See how many keywords are in Top 3, Top 10, Top 20, etc.</li>
+              </ul>
+
+              <h4>Key metrics explained</h4>
+              <ul>
+                <li><strong>Visibility Score</strong> — Weighted score based on positions and search volumes. Higher = better overall rankings.</li>
+                <li><strong>Estimated Traffic</strong> — Projected organic visits based on your positions and CTR model.</li>
+                <li><strong>Average Position</strong> — Mean ranking across all tracked keywords.</li>
+                <li><strong>Distribution</strong> — Breakdown of keywords by position range (Top 3, 4-10, 11-20, etc.).</li>
+                <li><strong>Changes</strong> — How many keywords improved, declined, were newly found, or lost since last check.</li>
+              </ul>
+
+              <h4>Pro tips</h4>
+              <ul>
+                <li>Set up Daily schedule for important keywords so you catch ranking drops early.</li>
+                <li>Use tags to group keywords by topic or priority.</li>
+                <li>A rising visibility score means your SEO efforts are working.</li>
+              </ul>
+            </GuideModal>
+
             <p className={styles.subtitle}>
               Monitor your keyword rankings over time
               {ov?.lastCheckedAt && (

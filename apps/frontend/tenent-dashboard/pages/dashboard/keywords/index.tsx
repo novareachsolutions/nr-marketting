@@ -11,6 +11,8 @@ import {
   useSaveKeyword,
 } from '@/hooks/useKeywords';
 import { showSuccessToast } from '@repo/shared-frontend';
+import { GuideModal } from '@/components/ui/GuideModal';
+import { AiInsights } from '@/components/ui/AiInsights';
 import type { KeywordSuggestion, SearchIntent, SuggestionFilters } from '@/types/keyword';
 import styles from './index.module.css';
 
@@ -75,6 +77,7 @@ function KeywordResearchContent() {
   const [filterMinWords, setFilterMinWords] = useState('');
   const [filterInclude, setFilterInclude] = useState('');
   const [filterExclude, setFilterExclude] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   // Build filters object
   const filters: SuggestionFilters = {};
@@ -153,7 +156,64 @@ function KeywordResearchContent() {
       <Sidebar />
       <div className={sidebarStyles.contentWithSidebar}>
         <main className={styles.main}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 24 }}>Keyword Research</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>Keyword Research</h1>
+            <button
+              onClick={() => setShowGuide(true)}
+              style={{
+                width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)',
+                background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="How to use this tool"
+            >
+              ?
+            </button>
+          </div>
+
+          <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Keyword Research — Guide">
+            <h4>What is Keyword Research?</h4>
+            <p>
+              Keyword Research helps you discover what people are searching for on Google. Enter any keyword
+              and get detailed metrics — search volume, difficulty, CPC, intent — so you can decide which
+              keywords to target in your SEO strategy.
+            </p>
+
+            <h4>How to use it</h4>
+            <ul>
+              <li><strong>Search a keyword</strong> — Type any keyword and click Search. You'll see its monthly
+              search volume, keyword difficulty (0-100), cost per click, and search intent.</li>
+              <li><strong>Get suggestions</strong> — Click "Get Suggestions" to find related keywords. These are
+              keywords people also search for that you might want to target.</li>
+              <li><strong>Filter suggestions</strong> — Use match types (Broad/Phrase/Exact/Questions) and
+              advanced filters (intent, volume, KD%, word count) to narrow down the best opportunities.</li>
+              <li><strong>Save keywords</strong> — Select a project from the dropdown and click Save to add
+              keywords to your project for tracking.</li>
+            </ul>
+
+            <h4>Key metrics explained</h4>
+            <ul>
+              <li><strong>Search Volume</strong> — How many times per month this keyword is searched on Google.</li>
+              <li><strong>Keyword Difficulty (KD%)</strong> — How hard it is to rank in the top 10. Green (0-24) = Easy,
+              Yellow (25-49) = Medium, Orange (50-74) = Hard, Red (75-100) = Very Hard.</li>
+              <li><strong>CPC</strong> — How much advertisers pay per click for this keyword in Google Ads.</li>
+              <li><strong>Intent</strong> — Why someone searches this:
+              <strong> I</strong> = Informational (wants to learn),
+              <strong> N</strong> = Navigational (looking for a site),
+              <strong> C</strong> = Commercial (researching before buying),
+              <strong> T</strong> = Transactional (ready to buy).</li>
+              <li><strong>Priority Score</strong> — A composite score (0-100) combining volume, intent value, and
+              difficulty. Higher = better opportunity.</li>
+            </ul>
+
+            <h4>Pro tips</h4>
+            <ul>
+              <li>Target keywords with high volume + low KD% for quick wins.</li>
+              <li>Use "Questions" match type to find FAQ content ideas.</li>
+              <li>Focus on Transactional/Commercial intent keywords for revenue pages.</li>
+              <li>Check topic clusters to group related keywords into content pieces.</li>
+            </ul>
+          </GuideModal>
 
           {/* Search Bar */}
           <form className={styles.searchForm} onSubmit={handleSearch}>
@@ -197,6 +257,13 @@ function KeywordResearchContent() {
                 ))}
               </select>
             </div>
+          )}
+
+          {keywordData && (
+            <AiInsights
+              module="keyword-research"
+              context={{ keyword: keywordData.keyword, searchVolume: keywordData.searchVolume, difficulty: keywordData.difficulty, cpc: keywordData.cpc, intent: keywordData.intent, priorityScore: keywordData.priorityScore }}
+            />
           )}
 
           {/* Keyword Card */}

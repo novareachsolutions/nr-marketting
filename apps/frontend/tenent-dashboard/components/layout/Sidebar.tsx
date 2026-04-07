@@ -34,10 +34,21 @@ export function Sidebar({ projectId }: SidebarProps) {
     router.push('/login');
   };
 
-  const mainLinks: SidebarLink[] = [
-    { href: '/dashboard', icon: '🏠', label: 'Dashboard', match: '/dashboard' },
+  const seoToolLinks: SidebarLink[] = [
     { href: '/dashboard/keywords', icon: '🔍', label: 'Keyword Research', match: '/dashboard/keywords' },
     { href: '/dashboard/domain-overview', icon: '🌐', label: 'Domain Overview', match: '/dashboard/domain-overview' },
+    { href: '/dashboard/organic-rankings', icon: '📈', label: 'Organic Rankings', match: '/dashboard/organic-rankings' },
+    { href: '/dashboard/top-pages', icon: '📄', label: 'Top Pages', match: '/dashboard/top-pages' },
+    { href: '/dashboard/compare-domains', icon: '⚖️', label: 'Compare Domains', match: '/dashboard/compare-domains' },
+    { href: '/dashboard/keyword-gap', icon: '🔀', label: 'Keyword Gap', match: '/dashboard/keyword-gap' },
+    { href: '/dashboard/backlink-gap', icon: '🔗', label: 'Backlink Gap', match: '/dashboard/backlink-gap' },
+  ];
+
+  const mainLinks: SidebarLink[] = [
+    { href: '/dashboard', icon: '🏠', label: 'Dashboard', match: '/dashboard' },
+    // Only show global SEO tools when NOT inside a project
+    ...(!projectId ? seoToolLinks : []),
+    { href: '/dashboard/about', icon: '💡', label: 'About Platform', match: '/dashboard/about' },
     { href: '/billing', icon: '💳', label: 'Billing & Plans', match: '/billing' },
     { href: '/settings/integrations', icon: '🔗', label: 'Integrations', match: '/settings' },
   ];
@@ -67,6 +78,42 @@ export function Sidebar({ projectId }: SidebarProps) {
           icon: '🛠',
           label: 'Site Audit',
           match: `/dashboard/projects/${projectId}/audits`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/domain-overview`,
+          icon: '🌐',
+          label: 'Domain Overview',
+          match: `/dashboard/projects/${projectId}/domain-overview`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/organic-rankings`,
+          icon: '📈',
+          label: 'Organic Rankings',
+          match: `/dashboard/projects/${projectId}/organic-rankings`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/top-pages`,
+          icon: '📄',
+          label: 'Top Pages',
+          match: `/dashboard/projects/${projectId}/top-pages`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/compare-domains`,
+          icon: '⚖️',
+          label: 'Compare Domains',
+          match: `/dashboard/projects/${projectId}/compare-domains`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/keyword-gap`,
+          icon: '🔀',
+          label: 'Keyword Gap',
+          match: `/dashboard/projects/${projectId}/keyword-gap`,
+        },
+        {
+          href: `/dashboard/projects/${projectId}/backlink-gap`,
+          icon: '🔗',
+          label: 'Backlink Gap',
+          match: `/dashboard/projects/${projectId}/backlink-gap`,
         },
         {
           href: `/dashboard/projects/${projectId}/settings`,

@@ -4,6 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
 import { useAudits, useStartAudit, useScoreHistory } from '@/hooks/useAudits';
@@ -53,6 +54,7 @@ function AuditsContent() {
   const { data: scoreHistory } = useScoreHistory(id, 10);
   const startAudit = useStartAudit();
   const [startError, setStartError] = useState('');
+  const [showGuide, setShowGuide] = useState(false);
 
   const crawlJobs = auditsResponse?.data ?? (auditsResponse as unknown as CrawlJob[]) ?? [];
 
@@ -85,7 +87,10 @@ function AuditsContent() {
         <main className={styles.main}>
           <div className={styles.header}>
             <div>
-              <h1 className={styles.pageTitle}>Site Audits</h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <h1 className={styles.pageTitle}>Site Audits</h1>
+                <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+              </div>
               <p className={styles.pageSubtitle}>
                 Crawl your site to find SEO issues and track health over time.
               </p>
@@ -98,6 +103,34 @@ function AuditsContent() {
               {startAudit.isPending ? 'Starting...' : 'Start New Audit'}
             </button>
           </div>
+
+          <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Site Audits — Guide">
+            <h4>What are Site Audits?</h4>
+            <p>Site Audit crawls your website and identifies SEO, GEO (Generative Engine Optimization), and AEO (Answer Engine Optimization) issues. Each audit produces a health score and actionable recommendations.</p>
+
+            <h4>How to use it</h4>
+            <ul>
+              <li><strong>Start an audit</strong> — Click "Start New Audit" to crawl your site.</li>
+              <li><strong>View results</strong> — Click any completed audit to see detailed issues, scores, and page-level data.</li>
+              <li><strong>Track health</strong> — The score history chart shows how your site health changes over time.</li>
+              <li><strong>Fix issues</strong> — Each issue includes a description, severity, and suggested fix.</li>
+            </ul>
+
+            <h4>Scores explained</h4>
+            <ul>
+              <li><strong>Overall Score (0-100)</strong> — Your site's total health. Higher is better.</li>
+              <li><strong>SEO Score (1-10)</strong> — Technical SEO health (titles, meta, links, speed).</li>
+              <li><strong>GEO Score (1-10)</strong> — Generative engine readiness (E-E-A-T, author info, trust signals).</li>
+              <li><strong>AEO Score (1-10)</strong> — Answer engine readiness (FAQ schema, direct answers, structured data).</li>
+            </ul>
+
+            <h4>Issue severities</h4>
+            <ul>
+              <li><strong>Error</strong> — Critical issues that need immediate attention.</li>
+              <li><strong>Warning</strong> — Important issues that should be fixed soon.</li>
+              <li><strong>Notice</strong> — Minor improvements that would be nice to have.</li>
+            </ul>
+          </GuideModal>
 
           {startError && (
             <div className={styles.errorBanner}>{startError}</div>

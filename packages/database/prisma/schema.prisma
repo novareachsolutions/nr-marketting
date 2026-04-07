@@ -45,6 +45,12 @@ enum UsageMetric {
   AI_CREDITS
   REPORTS_GENERATED
   DOMAIN_OVERVIEWS
+  ORGANIC_RANKINGS
+  TOP_PAGES
+  COMPARE_DOMAINS
+  KEYWORD_GAP
+  BACKLINK_GAP
+  AI_SUGGESTIONS
 }
 
 enum Device {
@@ -503,6 +509,88 @@ model DomainOverviewCache {
 
   @@unique([domain, country])
   @@map("domain_overview_cache")
+}
+
+// ============================================
+// ORGANIC RANKINGS CACHE
+// ============================================
+
+model OrganicRankingsCache {
+  id        String   @id @default(cuid())
+  domain    String
+  country   String   @default("US")
+  data      Json     // Full OrganicRankingsData response
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([domain, country])
+  @@map("organic_rankings_cache")
+}
+
+// ============================================
+// TOP PAGES CACHE
+// ============================================
+
+model TopPagesCache {
+  id        String   @id @default(cuid())
+  domain    String
+  country   String   @default("US")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([domain, country])
+  @@map("top_pages_cache")
+}
+
+// ============================================
+// COMPARE DOMAINS CACHE
+// ============================================
+
+model CompareDomainCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("compare_domain_cache")
+}
+
+// ============================================
+// KEYWORD GAP CACHE
+// ============================================
+
+model KeywordGapCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("keyword_gap_cache")
+}
+
+// ============================================
+// BACKLINK GAP CACHE
+// ============================================
+
+model BacklinkGapCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("backlink_gap_cache")
+}
+
+// ============================================
+// AI SUGGESTIONS CACHE
+// ============================================
+
+model AiSuggestionsCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_suggestions_cache")
 }
 
 // ============================================

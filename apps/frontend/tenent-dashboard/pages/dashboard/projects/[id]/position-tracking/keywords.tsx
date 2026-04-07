@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
+import { GuideModal } from '@/components/ui/GuideModal';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import {
   useTrackedKeywords,
@@ -61,6 +62,7 @@ function RankingsTableContent() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [filters, setFilters] = useState<TrackedKeywordsFilters>({});
   const [searchInput, setSearchInput] = useState('');
@@ -179,7 +181,40 @@ function RankingsTableContent() {
       <main className={`${sidebarStyles.contentWithSidebar} ${styles.main}`}>
         <div className={styles.header}>
           <div>
-            <h1 className={styles.title}>Rankings Table</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <h1 className={styles.title}>Rankings Table</h1>
+              <button onClick={() => setShowGuide(true)} style={{ width: 28, height: 28, borderRadius: '50%', border: '1px solid var(--border-primary)', background: 'var(--bg-card)', color: 'var(--text-tertiary)', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="How to use this tool">?</button>
+            </div>
+
+            <GuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} title="Rankings Table — Guide">
+              <h4>What is the Rankings Table?</h4>
+              <p>View and manage all your tracked keywords with their current positions, changes, search volumes, and SERP features. This is where you add, remove, tag, and monitor individual keyword rankings.</p>
+
+              <h4>How to use it</h4>
+              <ul>
+                <li><strong>Add keywords</strong> — Click "Add Keywords" to enter keywords manually or import from your project's saved keywords.</li>
+                <li><strong>View rankings</strong> — Each row shows the keyword, current position, change since last check, volume, ranking URL, and SERP features.</li>
+                <li><strong>Filter & sort</strong> — Use filters for change type (improved/declined/new/lost), tags, device, and search. Click column headers to sort.</li>
+                <li><strong>Bulk actions</strong> — Select multiple keywords with checkboxes to tag or delete in bulk.</li>
+                <li><strong>Tag keywords</strong> — Create tags to organize keywords by topic, priority, or campaign.</li>
+              </ul>
+
+              <h4>Position changes explained</h4>
+              <ul>
+                <li><strong>+N (green)</strong> — Keyword moved up N positions (improved).</li>
+                <li><strong>-N (red)</strong> — Keyword dropped N positions (declined).</li>
+                <li><strong>NEW (blue)</strong> — Keyword appeared in rankings for the first time.</li>
+                <li><strong>LOST (gray)</strong> — Keyword fell out of the top 100.</li>
+              </ul>
+
+              <h4>Pro tips</h4>
+              <ul>
+                <li>Import keywords from your project to quickly set up tracking.</li>
+                <li>Use tags to group keywords by content cluster or page.</li>
+                <li>Click any keyword to see its full position history chart.</li>
+              </ul>
+            </GuideModal>
+
             <p className={styles.subtitle}>
               <Link
                 href={`/dashboard/projects/${projectId}/position-tracking`}
