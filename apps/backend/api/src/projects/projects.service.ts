@@ -141,21 +141,9 @@ export class ProjectsService {
 
   async addCompetitor(
     projectId: string,
-    plan: string,
+    _plan: string,
     dto: AddCompetitorDto,
   ) {
-    const planLimits = PLAN_LIMITS[plan as PlanType] || PLAN_LIMITS.FREE;
-
-    const competitorCount = await this.prisma.competitor.count({
-      where: { projectId },
-    });
-
-    if (competitorCount >= planLimits.maxCompetitorsPerProject) {
-      throw new ForbiddenException(
-        `Your ${plan} plan allows up to ${planLimits.maxCompetitorsPerProject} competitor(s) per project. Please upgrade.`,
-      );
-    }
-
     const domain = this.normalizeDomain(dto.domain);
 
     const existing = await this.prisma.competitor.findUnique({
