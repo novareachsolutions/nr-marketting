@@ -28,9 +28,6 @@ function DashboardContent() {
     }
   };
 
-  const planLimits: Record<string, number> = { FREE: 1, PRO: 5, AGENCY: 25 };
-  const maxProjects = planLimits[user?.plan || 'FREE'] || 1;
-
   return (
     <>
       <Head>
@@ -46,19 +43,14 @@ function DashboardContent() {
               </h1>
               <p className={styles.subtitle}>
                 {projects?.length
-                  ? `You have ${projects.length} of ${maxProjects} project(s)`
+                  ? `You have ${projects.length} project(s)`
                   : 'Get started by creating your first project'}
               </p>
             </div>
             <button
               className={styles.createBtn}
               onClick={() => setShowCreateModal(true)}
-              disabled={(projects?.length ?? 0) >= maxProjects}
-              title={
-                (projects?.length ?? 0) >= maxProjects
-                  ? `Your ${user?.plan} plan allows ${maxProjects} project(s)`
-                  : 'Create a new project'
-              }
+              title="Create a new project"
             >
               + New Project
             </button>
