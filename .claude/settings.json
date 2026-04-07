@@ -18,8 +18,7 @@
       "Bash(netstat -ano)",
       "Bash(pnpm --filter tenent-dashboard add jspdf jspdf-autotable)",
       "Bash(curl -s http://localhost:3000/health)",
-      "Read(//c/Users/AYAN RAZVI/nr/nr-marketting/apps/frontend/tenent-dashboard/**)",
-      "Read(//c/Users/AYAN/ RAZVI/nr/nr-marketting/**)"
+      "Bash(docker compose:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\AYAN RAZVI\\nr\\nr-marketting\\apps\\frontend\\tenent-dashboard\\pages\\dashboard\\projects\\[id]",
