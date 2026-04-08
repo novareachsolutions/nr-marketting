@@ -41,14 +41,23 @@ export class AiSuggestionsService {
       return cached.data as unknown as { suggestions: string[] };
     }
 
+    // For competitor suggestions, scrape the domain to understand the business
+    if (module === 'suggest-competitors' && context.domain) {
+      const siteDescription = await this.scrapeDomainDescription(context.domain);
+      if (siteDescription) {
+        context = { ...context, siteDescription };
+      }
+    }
+
     const systemPrompt = this.getSystemPrompt(module);
     const userPrompt = this.getUserPrompt(module, context);
+    const model = module === 'suggest-competitors' ? 'gpt-4o' : 'gpt-4o-mini';
 
     try {
       const response = await axios.post(
         'https://api.openai.com/v1/chat/completions',
         {
-          model: 'gpt-4o-mini',
+          model,
           temperature: 0.5,
           max_tokens: 1000,
           response_format: { type: 'json_object' },
@@ -97,14 +106,64 @@ export class AiSuggestionsService {
       'keyword-gap': `You are an SEO consultant analyzing keyword gaps. Based on the gap analysis, give 3-5 specific, actionable suggestions for closing keyword gaps. Focus on missing keywords, content creation priorities, and quick wins.`,
       'backlink-gap': `You are an SEO consultant analyzing backlink gaps. Based on the referring domain analysis, give 3-5 specific, actionable suggestions for link building outreach. Focus on high-authority prospects and outreach strategy.`,
       'keyword-research': `You are an SEO consultant analyzing keyword research data. Based on the keyword metrics, give 3-5 specific, actionable suggestions for keyword targeting strategy. Focus on difficulty, intent, and content planning.`,
-      'suggest-competitors': `You are an SEO competitive analyst. Given a domain, suggest 5 competitor domains that operate in the same niche/industry. For each, provide the domain and a brief reason why they're a competitor. Return JSON: {"suggestions":["domain1.com - They compete for similar keywords in your niche","domain2.com - Major player in your industry with overlapping audience"]}. Each suggestion MUST be formatted as "domain.com - reason". Use real, well-known domains relevant to the given domain's industry.`,
+      'suggest-competitors': `You are an SEO competitive analyst. You will be given a domain along with a description of what the website actually does (scraped from the site). Use this description to understand the business's exact products, services, and target market. Then suggest 5 competitor domains that DIRECTLY compete for the same customers and keywords in the same specific niche. IMPORTANT: Suggest competitors that are at a SIMILAR business level and scale — NOT industry giants or market leaders. The competitors should be businesses realistically fighting for the same customers and search rankings. Do NOT suggest generic or loosely related sites. Return JSON with this EXACT structure: {"suggestions":[{"domain":"competitor1.com","reason":"Brief reason why they compete","authorityScore":35,"organicTraffic":12000,"organicKeywords":850,"backlinks":3200}]}. For each competitor, estimate realistic SEO metrics based on your knowledge. authorityScore is 0-100, organicTraffic is estimated monthly visits, organicKeywords is number of ranking keywords, backlinks is total backlink count. Make metrics realistic for similar-scale businesses.`,
     };
     return (prompts[module] || prompts['domain-overview']) +
       (module === 'suggest-competitors' ? '' : ` Return JSON: {"suggestions":["<suggestion 1>","<suggestion 2>","<suggestion 3>"]}. Each suggestion should be 1-2 sentences, specific, and actionable. Reference actual numbers from the data.`);
   }
 
   private getUserPrompt(module: string, context: Record<string, any>): string {
+    if (module === 'suggest-competitors') {
+      const domain = context.domain || '';
+      const siteDescription = context.siteDescription || 'No description available';
+      return `Find direct competitors for: ${domain}\n\nHere is what this website does (scraped from the site):\n${siteDescription}\n\nBased on this, suggest 5 domains that compete in the exact same market and niche.`;
+    }
     return `Module: ${module}\nData:\n${JSON.stringify(context, null, 0)}`;
+  }
+
+  private async scrapeDomainDescription(domain: string): Promise<string> {
+    try {
+      const url = `https://${domain.replace(/^https?:\/\//, '').replace(/^www\./, '')}`;
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NRSEOBot/1.0)' },
+        maxRedirects: 3,
+      });
+
+      const html: string = response.data;
+
+      // Extract title
+      const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+      const title = titleMatch ? titleMatch[1].trim() : '';
+
+      // Extract meta description
+      const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i)
+        || html.match(/<meta[^>]*content=["']([\s\S]*?)["'][^>]*name=["']description["'][^>]*>/i);
+      const metaDesc = metaDescMatch ? metaDescMatch[1].trim() : '';
+
+      // Extract og:description
+      const ogDescMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([\s\S]*?)["'][^>]*>/i)
+        || html.match(/<meta[^>]*content=["']([\s\S]*?)["'][^>]*property=["']og:description["'][^>]*>/i);
+      const ogDesc = ogDescMatch ? ogDescMatch[1].trim() : '';
+
+      // Extract h1 tags
+      const h1Matches = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
+      const h1s = h1Matches
+        .slice(0, 3)
+        .map((h) => h.replace(/<[^>]+>/g, '').trim())
+        .filter(Boolean);
+
+      const parts: string[] = [];
+      if (title) parts.push(`Title: ${title}`);
+      if (metaDesc) parts.push(`Description: ${metaDesc}`);
+      if (ogDesc && ogDesc !== metaDesc) parts.push(`OG Description: ${ogDesc}`);
+      if (h1s.length > 0) parts.push(`Headings: ${h1s.join(', ')}`);
+
+      return parts.join('\n') || '';
+    } catch (err: any) {
+      this.logger.warn(`Failed to scrape ${domain}: ${err?.message}`);
+      return '';
+    }
   }
 
   private simpleHash(str: string): string {

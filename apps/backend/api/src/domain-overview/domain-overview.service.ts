@@ -2,7 +2,6 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS } from '../common/constants/plan-limits';
 
 interface DomainOverviewData {
   domain: string;
@@ -89,9 +88,6 @@ export class DomainOverviewService {
     if (!normalized) {
       throw new BadRequestException('Invalid domain');
     }
-
-    // Check plan limit
-    await this.checkUsageLimit(userId);
 
     // Check cache (7-day TTL)
     const sevenDaysAgo = new Date();
@@ -420,54 +416,11 @@ Base your estimates on real-world knowledge. Be realistic. For well-known domain
     };
   }
 
-  private async checkUsageLimit(userId: string): Promise<void> {
-    // Get user plan
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { userId },
-      select: { plan: true },
-    });
-
-    const plan = subscription?.plan || 'FREE';
-    const limit = PLAN_LIMITS[plan].maxDomainOverviewsPerDay;
-
-    if (limit === -1) return; // unlimited
-
-    // Count today's usage
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const period = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
-
-    const usage = await this.prisma.usageRecord.findUnique({
-      where: {
-        userId_metric_period: {
-          userId,
-          metric: 'DOMAIN_OVERVIEWS',
-          period,
-        },
-      },
-    });
-
-    if (usage && usage.count >= limit) {
-      throw new BadRequestException(
-        `Daily domain overview limit reached (${limit}). Upgrade your plan for more.`,
-      );
-    }
-  }
-
   private async incrementUsage(userId: string): Promise<void> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
     const period = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
-
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { userId },
-      select: { plan: true },
-    });
-
-    const plan = subscription?.plan || 'FREE';
-    const limit = PLAN_LIMITS[plan].maxDomainOverviewsPerDay;
 
     await this.prisma.usageRecord.upsert({
       where: {
@@ -481,7 +434,7 @@ Base your estimates on real-world knowledge. Be realistic. For well-known domain
         userId,
         metric: 'DOMAIN_OVERVIEWS',
         count: 1,
-        limit: limit === -1 ? 999999 : limit,
+        limit: 999999,
         period,
       },
       update: {

@@ -1,37 +1,32 @@
+import { AlertTriangle } from 'lucide-react';
+import { Button } from './Button';
+import { cn } from '@/lib/utils';
+
 interface ErrorRetryProps {
   message?: string;
   onRetry?: () => void;
+  className?: string;
 }
 
-export function ErrorRetry({ message, onRetry }: ErrorRetryProps) {
+export function ErrorRetry({ message, onRetry, className }: ErrorRetryProps) {
   return (
-    <div style={{
-      textAlign: 'center',
-      padding: 32,
-      background: 'var(--bg-card)',
-      borderRadius: 'var(--radius-lg)',
-      border: '1px solid var(--border-primary)',
-    }}>
-      <div style={{ color: 'var(--accent-danger)', fontSize: 14, marginBottom: onRetry ? 12 : 0 }}>
-        {message || 'Something went wrong. Please try again.'}
+    <div
+      className={cn(
+        'flex flex-col items-center justify-center gap-3 p-8',
+        'bg-bg-card rounded-lg border border-border text-center',
+        className
+      )}
+    >
+      <div className="h-10 w-10 rounded-full bg-accent-danger-light flex items-center justify-center">
+        <AlertTriangle size={18} className="text-accent-danger" />
       </div>
+      <p className="text-sm text-accent-danger">
+        {message || 'Something went wrong. Please try again.'}
+      </p>
       {onRetry && (
-        <button
-          onClick={onRetry}
-          style={{
-            height: 36,
-            padding: '0 20px',
-            background: 'var(--accent-primary)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
-        >
+        <Button size="sm" onClick={onRetry}>
           Try Again
-        </button>
+        </Button>
       )}
     </div>
   );

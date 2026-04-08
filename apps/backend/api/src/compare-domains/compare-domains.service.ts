@@ -2,7 +2,6 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS } from '../common/constants/plan-limits';
 
 interface DomainMetrics {
   domain: string;
@@ -170,14 +169,6 @@ Be realistic. Use actual domain names as keys.`,
     todayStart.setHours(0, 0, 0, 0);
     const period = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
 
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { userId },
-      select: { plan: true },
-    });
-
-    const plan = subscription?.plan || 'FREE';
-    const limit = PLAN_LIMITS[plan].maxCompareDomainsPerDay;
-
     await this.prisma.usageRecord.upsert({
       where: {
         userId_metric_period: {
@@ -190,7 +181,7 @@ Be realistic. Use actual domain names as keys.`,
         userId,
         metric: 'COMPARE_DOMAINS',
         count: 1,
-        limit: limit === -1 ? 999999 : limit,
+        limit: 999999,
         period,
       },
       update: {

@@ -4,7 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { AuthLayout } from '@/components/auth/AuthLayout';
-import { InputField } from '@/components/ui/InputField';
+import { InputField } from '@/components/ui/Input';
 import styles from '@/components/auth/AuthLayout.module.css';
 
 export default function RegisterPage() {

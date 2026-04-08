@@ -2,7 +2,6 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS } from '../common/constants/plan-limits';
 
 type ChangeType = 'improved' | 'declined' | 'new' | 'lost';
 type SearchIntent = 'informational' | 'navigational' | 'commercial' | 'transactional';
@@ -188,14 +187,6 @@ Be realistic. Short URLs.`,
     todayStart.setHours(0, 0, 0, 0);
     const period = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
 
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { userId },
-      select: { plan: true },
-    });
-
-    const plan = subscription?.plan || 'FREE';
-    const limit = PLAN_LIMITS[plan].maxOrganicRankingsPerDay;
-
     await this.prisma.usageRecord.upsert({
       where: {
         userId_metric_period: {
@@ -208,7 +199,7 @@ Be realistic. Short URLs.`,
         userId,
         metric: 'ORGANIC_RANKINGS',
         count: 1,
-        limit: limit === -1 ? 999999 : limit,
+        limit: 999999,
         period,
       },
       update: {

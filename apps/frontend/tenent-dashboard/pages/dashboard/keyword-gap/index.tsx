@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import Head from 'next/head';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { GuideModal } from '@/components/ui/GuideModal';
+import { GuideModal } from '@/components/ui/Dialog';
 import { AiInsights } from '@/components/ui/AiInsights';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useKeywordGap } from '@/hooks/useKeywordGap';

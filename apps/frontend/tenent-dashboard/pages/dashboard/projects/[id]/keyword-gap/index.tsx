@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { GuideModal } from '@/components/ui/GuideModal';
+import { GuideModal } from '@/components/ui/Dialog';
 import { AiInsights } from '@/components/ui/AiInsights';
+import { NextStepBar } from '@/components/ui/NextStepBar';
 import { SuggestCompetitors } from '@/components/ui/SuggestCompetitors';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject, useCompetitors } from '@/hooks/useProjects';
@@ -135,6 +136,7 @@ function ProjectKeywordGapContent() {
               </div>
             </>
           )}
+          <NextStepBar projectId={id} currentStep={5} />
         </main>
       </div>
     </div>

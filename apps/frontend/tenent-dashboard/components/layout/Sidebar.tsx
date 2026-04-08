@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '../ui/ThemeToggle';
-import styles from './Sidebar.module.css';
+import { LogOut } from 'lucide-react';
 
 interface SidebarLink {
   href: string;
   icon: string;
   label: string;
-  match?: string; // pathname prefix to match for active state
+  match?: string;
 }
 
 interface SidebarProps {
@@ -22,7 +22,7 @@ export function Sidebar({ projectId }: SidebarProps) {
   const initials =
     user?.name
       ?.split(' ')
-      .map((w) => w[0])
+      .map((w: string) => w[0])
       .join('')
       .toUpperCase()
       .slice(0, 2) ||
@@ -46,7 +46,6 @@ export function Sidebar({ projectId }: SidebarProps) {
 
   const mainLinks: SidebarLink[] = [
     { href: '/dashboard', icon: '🏠', label: 'Dashboard', match: '/dashboard' },
-    // Only show global SEO tools when NOT inside a project
     ...(!projectId ? seoToolLinks : []),
     { href: '/dashboard/about', icon: '💡', label: 'About Platform', match: '/dashboard/about' },
     { href: '/billing', icon: '💳', label: 'Billing & Plans', match: '/billing' },
@@ -55,78 +54,23 @@ export function Sidebar({ projectId }: SidebarProps) {
 
   const projectLinks: SidebarLink[] = projectId
     ? [
-        {
-          href: `/dashboard/projects/${projectId}`,
-          icon: '📊',
-          label: 'Overview',
-          match: `/dashboard/projects/${projectId}`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/keywords`,
-          icon: '🔑',
-          label: 'Keywords',
-          match: `/dashboard/projects/${projectId}/keywords`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/position-tracking`,
-          icon: '📍',
-          label: 'Position Tracking',
-          match: `/dashboard/projects/${projectId}/position-tracking`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/audits`,
-          icon: '🛠',
-          label: 'Site Audit',
-          match: `/dashboard/projects/${projectId}/audits`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/domain-overview`,
-          icon: '🌐',
-          label: 'Domain Overview',
-          match: `/dashboard/projects/${projectId}/domain-overview`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/organic-rankings`,
-          icon: '📈',
-          label: 'Organic Rankings',
-          match: `/dashboard/projects/${projectId}/organic-rankings`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/top-pages`,
-          icon: '📄',
-          label: 'Top Pages',
-          match: `/dashboard/projects/${projectId}/top-pages`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/compare-domains`,
-          icon: '⚖️',
-          label: 'Compare Domains',
-          match: `/dashboard/projects/${projectId}/compare-domains`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/keyword-gap`,
-          icon: '🔀',
-          label: 'Keyword Gap',
-          match: `/dashboard/projects/${projectId}/keyword-gap`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/backlink-gap`,
-          icon: '🔗',
-          label: 'Backlink Gap',
-          match: `/dashboard/projects/${projectId}/backlink-gap`,
-        },
-        {
-          href: `/dashboard/projects/${projectId}/settings`,
-          icon: '⚙️',
-          label: 'Settings',
-          match: `/dashboard/projects/${projectId}/settings`,
-        },
+        { href: `/dashboard/projects/${projectId}`, icon: '📊', label: 'Overview', match: `/dashboard/projects/${projectId}` },
+        { href: `/dashboard/projects/${projectId}/keywords`, icon: '🔑', label: 'Keywords', match: `/dashboard/projects/${projectId}/keywords` },
+        { href: `/dashboard/keywords?projectId=${projectId}`, icon: '🔍', label: 'Keyword Research', match: `/dashboard/keywords` },
+        { href: `/dashboard/projects/${projectId}/position-tracking`, icon: '📍', label: 'Position Tracking', match: `/dashboard/projects/${projectId}/position-tracking` },
+        { href: `/dashboard/projects/${projectId}/audits`, icon: '🛠', label: 'Site Audit', match: `/dashboard/projects/${projectId}/audits` },
+        { href: `/dashboard/projects/${projectId}/domain-overview`, icon: '🌐', label: 'Domain Overview', match: `/dashboard/projects/${projectId}/domain-overview` },
+        { href: `/dashboard/projects/${projectId}/organic-rankings`, icon: '📈', label: 'Organic Rankings', match: `/dashboard/projects/${projectId}/organic-rankings` },
+        { href: `/dashboard/projects/${projectId}/top-pages`, icon: '📄', label: 'Top Pages', match: `/dashboard/projects/${projectId}/top-pages` },
+        { href: `/dashboard/projects/${projectId}/compare-domains`, icon: '⚖️', label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
+        { href: `/dashboard/projects/${projectId}/keyword-gap`, icon: '🔀', label: 'Keyword Gap', match: `/dashboard/projects/${projectId}/keyword-gap` },
+        { href: `/dashboard/projects/${projectId}/backlink-gap`, icon: '🔗', label: 'Backlink Gap', match: `/dashboard/projects/${projectId}/backlink-gap` },
+        { href: `/dashboard/projects/${projectId}/settings`, icon: '⚙️', label: 'Settings', match: `/dashboard/projects/${projectId}/settings` },
       ]
     : [];
 
   const isActive = (link: SidebarLink) => {
     if (!link.match) return false;
-    // Exact match for dashboard home, prefix match for others
     if (link.match === '/dashboard') {
       return router.asPath === '/dashboard' || router.asPath === '/dashboard/';
     }
@@ -134,23 +78,23 @@ export function Sidebar({ projectId }: SidebarProps) {
   };
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className="app-sidebar">
       {/* Logo */}
-      <Link href="/dashboard" className={styles.logo}>
-        <div className={styles.logoIcon}>N</div>
-        <span className={styles.logoText}>NR SEO</span>
+      <Link href="/dashboard" className="sidebar-logo">
+        <div className="sidebar-logo-icon">N</div>
+        <span className="sidebar-logo-text">NR SEO</span>
       </Link>
 
       {/* Main Navigation */}
-      <nav className={styles.navSection}>
-        <div className={styles.navLabel}>Main</div>
+      <nav className="sidebar-nav">
+        <div className="sidebar-nav-label">Main</div>
         {mainLinks.map((link) => (
           <Link
             key={link.href}
             href={link.href}
-            className={isActive(link) ? styles.navLinkActive : styles.navLink}
+            className={`sidebar-link ${isActive(link) ? 'sidebar-link-active' : ''}`}
           >
-            <span className={styles.navIcon}>{link.icon}</span>
+            <span className="sidebar-link-icon">{link.icon}</span>
             {link.label}
           </Link>
         ))}
@@ -159,18 +103,16 @@ export function Sidebar({ projectId }: SidebarProps) {
       {/* Project Navigation */}
       {projectId && projectLinks.length > 0 && (
         <>
-          <div className={styles.divider} />
-          <nav className={styles.navSection}>
-            <div className={styles.navLabel}>Project</div>
+          <div className="sidebar-divider" />
+          <nav className="sidebar-nav">
+            <div className="sidebar-nav-label">Project</div>
             {projectLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className={
-                  isActive(link) ? styles.navLinkActive : styles.navLink
-                }
+                className={`sidebar-link ${isActive(link) ? 'sidebar-link-active' : ''}`}
               >
-                <span className={styles.navIcon}>{link.icon}</span>
+                <span className="sidebar-link-icon">{link.icon}</span>
                 {link.label}
               </Link>
             ))}
@@ -179,23 +121,25 @@ export function Sidebar({ projectId }: SidebarProps) {
       )}
 
       {/* Footer */}
-      <div className={styles.footer}>
-        <div className={styles.userInfo}>
-          <div className={styles.avatar}>{initials}</div>
-          <div className={styles.userDetails}>
-            <div className={styles.userName}>{user?.name || user?.email}</div>
-            <div className={styles.userPlan}>{user?.plan} Plan</div>
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <div className="sidebar-user-avatar">{initials}</div>
+          <div className="sidebar-user-details">
+            <div className="sidebar-user-name">{user?.name || user?.email}</div>
+            <div className="sidebar-user-plan">{user?.plan} Plan</div>
           </div>
           <ThemeToggle />
         </div>
-        <div className={styles.footerActions}>
-          <button className={styles.logoutBtn} onClick={handleLogout}>
-            Sign Out
-          </button>
-        </div>
+        <button className="sidebar-logout" onClick={handleLogout}>
+          <LogOut size={13} />
+          Sign Out
+        </button>
       </div>
     </aside>
   );
 }
 
-export { styles as sidebarStyles };
+// Backward-compatible export for pages using sidebarStyles.contentWithSidebar
+export const sidebarStyles = {
+  contentWithSidebar: 'sidebar-content',
+};

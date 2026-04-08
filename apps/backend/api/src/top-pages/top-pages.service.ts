@@ -73,7 +73,7 @@ export class TopPagesService {
       update: { data: data as any },
     });
 
-    await incrementDailyUsage(this.prisma, userId, 'TOP_PAGES', 'maxTopPagesPerDay');
+    await incrementDailyUsage(this.prisma, userId, 'TOP_PAGES');
 
     return data;
   }

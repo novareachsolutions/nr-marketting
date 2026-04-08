@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
-import { Modal, modalStyles } from '../ui/Modal';
-import { InputField } from '../ui/InputField';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '../ui/Dialog';
+import { InputField } from '../ui/Input';
+import { Button } from '../ui/Button';
 import { useCreateProject } from '@/hooks/useProjects';
 import { showSuccessToast } from '@repo/shared-frontend';
 
@@ -48,69 +49,47 @@ export function CreateProjectModal({ isOpen, onClose, onCreated }: Props) {
   };
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="Create new project"
-      footer={
-        <>
-          <button className={modalStyles.cancelBtn} onClick={handleClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create new project</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {error && (
+              <div className="px-3.5 py-2.5 rounded-md bg-accent-danger-light text-accent-danger text-[13px] border border-accent-danger">
+                {error}
+              </div>
+            )}
+            <InputField
+              label="Website domain"
+              type="text"
+              placeholder="example.com"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              autoFocus
+            />
+            <InputField
+              label="Project name"
+              type="text"
+              placeholder="My Website"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <p className="text-xs text-text-tertiary leading-relaxed">
+              The domain will be normalized automatically (removes http://, www., trailing slashes).
+            </p>
+          </form>
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
-          </button>
-          <button
-            className={modalStyles.submitBtn}
-            onClick={handleSubmit}
-            disabled={createProject.isPending}
-          >
+          </Button>
+          <Button onClick={handleSubmit} disabled={createProject.isPending}>
             {createProject.isPending ? 'Creating...' : 'Create project'}
-          </button>
-        </>
-      }
-    >
-      <form
-        onSubmit={handleSubmit}
-        style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-      >
-        {error && (
-          <div
-            style={{
-              padding: '10px 14px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--accent-danger-light)',
-              color: 'var(--accent-danger)',
-              fontSize: 13,
-              border: '1px solid var(--accent-danger)',
-            }}
-          >
-            {error}
-          </div>
-        )}
-        <InputField
-          label="Website domain"
-          type="text"
-          placeholder="example.com"
-          value={domain}
-          onChange={(e) => setDomain(e.target.value)}
-          autoFocus
-        />
-        <InputField
-          label="Project name"
-          type="text"
-          placeholder="My Website"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <p
-          style={{
-            fontSize: 12,
-            color: 'var(--text-tertiary)',
-            lineHeight: 1.5,
-          }}
-        >
-          The domain will be normalized automatically (removes http://, www.,
-          trailing slashes).
-        </p>
-      </form>
-    </Modal>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -6,7 +6,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS } from '../common/constants/plan-limits';
 import { CreateCheckoutDto } from './dto';
 
 @Injectable()
@@ -333,22 +332,21 @@ export class BillingService {
     return 'MONTHLY';
   }
 
-  private async updateUsageLimits(userId: string, plan: string) {
-    const limits = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS] || PLAN_LIMITS.FREE;
+  private async updateUsageLimits(userId: string, _plan: string) {
     const period = this.getCurrentPeriod();
 
-    const metricLimits = [
-      { metric: 'KEYWORDS_TRACKED' as const, limit: limits.maxTrackedKeywordsPerProject },
-      { metric: 'PAGES_CRAWLED' as const, limit: limits.maxPagesPerCrawl },
-      { metric: 'AI_CREDITS' as const, limit: limits.maxAiMessagesPerMonth },
-      { metric: 'REPORTS_GENERATED' as const, limit: limits.maxReportsPerMonth },
+    const metrics = [
+      'KEYWORDS_TRACKED' as const,
+      'PAGES_CRAWLED' as const,
+      'AI_CREDITS' as const,
+      'REPORTS_GENERATED' as const,
     ];
 
-    for (const { metric, limit } of metricLimits) {
+    for (const metric of metrics) {
       await this.prisma.usageRecord.upsert({
         where: { userId_metric_period: { userId, metric, period } },
-        update: { limit: limit === -1 ? 999999 : limit },
-        create: { userId, metric, period, count: 0, limit: limit === -1 ? 999999 : limit },
+        update: { limit: 999999 },
+        create: { userId, metric, period, count: 0, limit: 999999 },
       });
     }
   }

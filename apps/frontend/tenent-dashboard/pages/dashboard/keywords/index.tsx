@@ -1,4 +1,5 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
@@ -11,7 +12,7 @@ import {
   useSaveKeyword,
 } from '@/hooks/useKeywords';
 import { showSuccessToast } from '@repo/shared-frontend';
-import { GuideModal } from '@/components/ui/GuideModal';
+import { GuideModal } from '@/components/ui/Dialog';
 import { AiInsights } from '@/components/ui/AiInsights';
 import type { KeywordSuggestion, SearchIntent, SuggestionFilters } from '@/types/keyword';
 import styles from './index.module.css';
@@ -56,17 +57,28 @@ const INTENT_LABELS: Record<SearchIntent, string> = {
 type MatchType = 'broad' | 'phrase' | 'exact' | 'questions';
 
 function KeywordResearchContent() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { data: projects } = useProjects();
   const saveKeyword = useSaveKeyword();
+
+  // Auto-select project from query param (e.g. when navigating from project sidebar)
+  const queryProjectId = (router.query.projectId as string) || '';
 
   const [searchInput, setSearchInput] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [country, setCountry] = useState('AU');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [sugPage, setSugPage] = useState(1);
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(queryProjectId);
   const [savingKeyword, setSavingKeyword] = useState<string | null>(null);
+
+  // Sync project selection when query param becomes available
+  useEffect(() => {
+    if (queryProjectId && !selectedProjectId) {
+      setSelectedProjectId(queryProjectId);
+    }
+  }, [queryProjectId]);
 
   // Filter state
   const [matchType, setMatchType] = useState<MatchType>('broad');
@@ -153,7 +165,7 @@ function KeywordResearchContent() {
       <Head>
         <title>Keyword Research — NR SEO Platform</title>
       </Head>
-      <Sidebar />
+      <Sidebar projectId={queryProjectId || undefined} />
       <div className={sidebarStyles.contentWithSidebar}>
         <main className={styles.main}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -246,8 +258,8 @@ function KeywordResearchContent() {
             </button>
           </form>
 
-          {/* Project Selector */}
-          {projects && projects.length > 1 && (
+          {/* Project Selector — hidden when project is pre-selected via query param */}
+          {projects && projects.length > 1 && !queryProjectId && (
             <div className={styles.projectSelector}>
               <label className={styles.projectLabel}>Save keywords to:</label>
               <select className={styles.projectSelect} value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>

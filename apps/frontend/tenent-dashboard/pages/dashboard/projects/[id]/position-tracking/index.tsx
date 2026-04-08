@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { GuideModal } from '@/components/ui/GuideModal';
+import { GuideModal } from '@/components/ui/Dialog';
+import { NextStepBar } from '@/components/ui/NextStepBar';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import {
   usePositionTrackingOverview,
@@ -364,6 +365,7 @@ function PositionTrackingContent() {
             </div>
           </>
         )}
+        <NextStepBar projectId={projectId} currentStep={7} />
       </main>
     </>
   );

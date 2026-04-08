@@ -2,10 +2,8 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS, PlanType } from '../common/constants/plan-limits';
 import { CreateProjectDto, UpdateProjectDto, AddCompetitorDto } from './dto';
 
 @Injectable()
@@ -24,20 +22,7 @@ export class ProjectsService {
 
   // ─── CREATE PROJECT ────────────────────────────────────
 
-  async create(userId: string, plan: string, dto: CreateProjectDto) {
-    const planLimits = PLAN_LIMITS[plan as PlanType] || PLAN_LIMITS.FREE;
-
-    // Check project count limit
-    const projectCount = await this.prisma.project.count({
-      where: { userId },
-    });
-
-    if (projectCount >= planLimits.maxProjects) {
-      throw new ForbiddenException(
-        `Your ${plan} plan allows up to ${planLimits.maxProjects} project(s). Please upgrade.`,
-      );
-    }
-
+  async create(userId: string, _plan: string, dto: CreateProjectDto) {
     const domain = this.normalizeDomain(dto.domain);
 
     // Check uniqueness

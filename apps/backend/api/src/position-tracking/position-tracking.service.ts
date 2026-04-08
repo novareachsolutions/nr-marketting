@@ -4,7 +4,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PLAN_LIMITS, PlanType } from '../common/constants/plan-limits';
 
 // CTR model by position (industry standard estimates)
 const CTR_MODEL: Record<number, number> = {
@@ -37,25 +36,11 @@ export class PositionTrackingService {
   async addKeywords(
     projectId: string,
     keywords: string[],
-    plan: string,
+    _plan: string,
     device: 'DESKTOP' | 'MOBILE' = 'DESKTOP',
     country: string = 'US',
     targetUrl?: string,
   ) {
-    const planKey = (plan || 'FREE') as PlanType;
-    const limits = PLAN_LIMITS[planKey] || PLAN_LIMITS.FREE;
-
-    const existingCount = await this.prisma.trackedKeyword.count({
-      where: { projectId, isActive: true },
-    });
-
-    const maxAllowed = limits.maxTrackedKeywordsPerProject;
-    if (existingCount + keywords.length > maxAllowed) {
-      throw new BadRequestException(
-        `Adding ${keywords.length} keywords would exceed your plan limit of ${maxAllowed}. Currently tracking ${existingCount}.`,
-      );
-    }
-
     const results = [];
     for (const keyword of keywords) {
       const trimmed = keyword.trim().toLowerCase();

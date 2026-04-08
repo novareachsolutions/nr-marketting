@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import styles from './ThemeToggle.module.css';
+import { Moon, Sun } from 'lucide-react';
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -20,12 +20,24 @@ export function ThemeToggle() {
 
   return (
     <button
-      className={styles.toggle}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid var(--border-primary)',
+        background: 'var(--bg-card)',
+        color: 'var(--text-secondary)',
+        cursor: 'pointer',
+        transition: 'all var(--transition-fast)',
+      }}
       onClick={toggle}
       aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
       title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
     >
-      {theme === 'dark' ? '☀️' : '🌙'}
+      {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
     </button>
   );
 }

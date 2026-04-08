@@ -4,8 +4,9 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { GuideModal } from '@/components/ui/GuideModal';
+import { GuideModal } from '@/components/ui/Dialog';
 import { SuggestCompetitors } from '@/components/ui/SuggestCompetitors';
+import { SeoRoadmap } from '@/components/ui/SeoRoadmap';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import {
   useProject,
@@ -122,6 +123,14 @@ function ProjectDetailContent() {
               <li>Use the sidebar navigation to access all project-specific tools.</li>
             </ul>
           </GuideModal>
+
+          {/* SEO Roadmap */}
+          <SeoRoadmap
+            projectId={id}
+            domain={project.domain}
+            counts={project._count || {}}
+            competitorCount={competitors?.length ?? 0}
+          />
 
           {/* Stats */}
           <div className={styles.statsRow}>

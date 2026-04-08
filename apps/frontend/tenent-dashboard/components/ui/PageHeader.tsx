@@ -1,27 +1,24 @@
 import { ReactNode } from 'react';
 import { HelpButton } from './HelpButton';
+import { Badge } from './Badge';
+import { cn } from '@/lib/utils';
 
 interface PageHeaderProps {
   title: string;
   onHelpClick?: () => void;
   badge?: string;
   children?: ReactNode;
+  className?: string;
 }
 
-export function PageHeader({ title, onHelpClick, badge, children }: PageHeaderProps) {
+export function PageHeader({ title, onHelpClick, badge, children, className }: PageHeaderProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{title}</h1>
+    <div className={cn('flex items-center gap-3 mb-6 flex-wrap', className)}>
+      <h1 className="text-[22px] font-bold text-text-primary m-0">{title}</h1>
       {badge && (
-        <span style={{
-          fontSize: 13,
-          color: 'var(--text-secondary)',
-          background: 'var(--bg-tertiary)',
-          padding: '4px 10px',
-          borderRadius: 'var(--radius-full)',
-        }}>
+        <Badge variant="default" size="lg">
           {badge}
-        </span>
+        </Badge>
       )}
       {onHelpClick && <HelpButton onClick={onHelpClick} />}
       {children}

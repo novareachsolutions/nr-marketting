@@ -4,20 +4,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { setGlobalToast } from '@repo/shared-frontend';
 import { AuthProvider } from '@/context/AuthContext';
-import { ToastContainer, useToast } from '@/components/ui/Toast';
+import { Toaster, toast } from '@/components/ui/Toaster';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 
 function InnerApp({ Component, pageProps }: AppProps) {
-  const { toasts, toast, removeToast } = useToast();
-
   useEffect(() => {
     setGlobalToast(toast);
     return () => setGlobalToast(null);
-  }, [toast]);
+  }, []);
 
   return (
     <>
       <Component {...pageProps} />
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      <Toaster />
     </>
   );
 }
@@ -39,7 +38,9 @@ export default function App(props: AppProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <InnerApp {...props} />
+        <TooltipProvider>
+          <InnerApp {...props} />
+        </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

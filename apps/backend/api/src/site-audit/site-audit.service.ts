@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrawlerService } from './crawler.service';
-import { PLAN_LIMITS, PlanType } from '../common/constants/plan-limits';
 
 @Injectable()
 export class SiteAuditService {
@@ -17,28 +16,7 @@ export class SiteAuditService {
     private readonly crawlerService: CrawlerService,
   ) {}
 
-  async startCrawl(projectId: string, _userId: string, plan: string) {
-    const planKey = (plan || 'FREE') as PlanType;
-    const limits = PLAN_LIMITS[planKey] || PLAN_LIMITS.FREE;
-
-    // Check monthly crawl limit
-    const now = new Date();
-    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    const crawlsThisMonth = await this.prisma.crawlJob.count({
-      where: {
-        projectId,
-        createdAt: { gte: periodStart, lt: periodEnd },
-      },
-    });
-
-    if (crawlsThisMonth >= limits.maxCrawlsPerMonth) {
-      throw new BadRequestException(
-        `Monthly crawl limit reached (${limits.maxCrawlsPerMonth} crawls for ${planKey} plan). Upgrade your plan for more crawls.`,
-      );
-    }
-
+  async startCrawl(projectId: string, _userId: string, _plan: string) {
     // Check if there's already a running crawl for this project
     const runningCrawl = await this.prisma.crawlJob.findFirst({
       where: {
@@ -58,7 +36,7 @@ export class SiteAuditService {
       data: {
         projectId,
         status: 'QUEUED',
-        pagesLimit: limits.maxPagesPerCrawl,
+        pagesLimit: 100_000,
       },
     });
 

@@ -2,7 +2,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrawlerService } from './crawler.service';
-import { PLAN_LIMITS, PlanType } from '../common/constants/plan-limits';
 
 @Injectable()
 export class CrawlSchedulerService {
@@ -51,31 +50,12 @@ export class CrawlSchedulerService {
           continue;
         }
 
-        // Check monthly crawl limit
-        const plan = (project.user.subscription?.plan || 'FREE') as PlanType;
-        const limits = PLAN_LIMITS[plan] || PLAN_LIMITS.FREE;
-
-        const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-        const crawlsThisMonth = await this.prisma.crawlJob.count({
-          where: {
-            projectId: project.id,
-            createdAt: { gte: periodStart, lt: periodEnd },
-          },
-        });
-
-        if (crawlsThisMonth >= limits.maxCrawlsPerMonth) {
-          this.logger.log(`Skipping scheduled crawl for project ${project.id} — monthly limit reached`);
-          continue;
-        }
-
         // Create and execute crawl
         const crawlJob = await this.prisma.crawlJob.create({
           data: {
             projectId: project.id,
             status: 'QUEUED',
-            pagesLimit: limits.maxPagesPerCrawl,
+            pagesLimit: 100_000,
           },
         });
 
