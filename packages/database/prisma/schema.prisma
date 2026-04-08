@@ -173,6 +173,13 @@ enum CrawlSchedule {
   MONTHLY
 }
 
+enum ReportSchedule {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
 enum IssueSeverity {
   ERROR
   WARNING
@@ -326,6 +333,11 @@ model Project {
   lastScheduledCrawlAt DateTime?    @map("last_scheduled_crawl_at")
   rankCheckSchedule   CrawlSchedule @default(NONE) @map("rank_check_schedule")
   lastRankCheckAt     DateTime?     @map("last_rank_check_at")
+  reportSchedule      ReportSchedule @default(NONE) @map("report_schedule")
+  reportDay           Int?           @map("report_day")           // 0=Sun, 1=Mon, ... 6=Sat
+  reportHour          Int            @default(2) @map("report_hour")  // 0-23 UTC
+  reportModules       Json?          @map("report_modules")       // ["siteAudit","domainOverview",...]
+  lastWeeklyReportAt  DateTime?      @map("last_weekly_report_at")
   createdAt           DateTime      @default(now()) @map("created_at")
   updatedAt           DateTime      @updatedAt @map("updated_at")
 
@@ -826,6 +838,7 @@ model Report {
   dateTo    DateTime     @map("date_to")
   filePath  String?      @map("file_path")
   fileSize  Int?         @map("file_size")
+  data      Json?
   status    ReportStatus @default(PENDING)
   createdAt DateTime     @default(now()) @map("created_at")
 

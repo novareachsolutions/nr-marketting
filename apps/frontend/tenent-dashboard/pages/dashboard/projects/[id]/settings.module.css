@@ -44,4 +44,17 @@
 .repoBranch { font-size: 11px; color: var(--text-tertiary); }
 .repoPrivate { font-size: 10px; padding: 2px 6px; border-radius: var(--radius-full); background: var(--accent-warning-light); color: var(--accent-warning); }
 
+.generateBtn { height: 36px; padding: 0 18px; border: 1px solid var(--accent-primary); border-radius: var(--radius-md); background: transparent; color: var(--accent-primary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast); }
+.generateBtn:hover:not(:disabled) { background: var(--accent-primary); color: #fff; }
+.generateBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.moduleList { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.moduleItem { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--text-primary); }
+.moduleDisabled { opacity: 0.45; cursor: not-allowed; }
+.moduleCheckbox { width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: inherit; }
+.moduleLabel { font-weight: 500; }
+.moduleNoData { font-size: 10px; padding: 1px 6px; border-radius: var(--radius-full); background: var(--bg-tertiary); color: var(--text-tertiary); margin-left: 4px; }
+
+.reportInfo { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+
 .loading { text-align: center; padding: 32px; color: var(--text-tertiary); font-size: 14px; }

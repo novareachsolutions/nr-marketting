@@ -23,6 +23,7 @@ import { CompareDomainsModule } from './compare-domains/compare-domains.module';
 import { KeywordGapModule } from './keyword-gap/keyword-gap.module';
 import { BacklinkGapModule } from './backlink-gap/backlink-gap.module';
 import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
     KeywordGapModule,
     BacklinkGapModule,
     AiSuggestionsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [

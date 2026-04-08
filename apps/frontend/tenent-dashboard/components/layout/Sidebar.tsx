@@ -65,6 +65,7 @@ export function Sidebar({ projectId }: SidebarProps) {
         { href: `/dashboard/projects/${projectId}/compare-domains`, icon: '⚖️', label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
         { href: `/dashboard/projects/${projectId}/keyword-gap`, icon: '🔀', label: 'Keyword Gap', match: `/dashboard/projects/${projectId}/keyword-gap` },
         { href: `/dashboard/projects/${projectId}/backlink-gap`, icon: '🔗', label: 'Backlink Gap', match: `/dashboard/projects/${projectId}/backlink-gap` },
+        { href: `/dashboard/projects/${projectId}/reports`, icon: '📋', label: 'Reports', match: `/dashboard/projects/${projectId}/reports` },
         { href: `/dashboard/projects/${projectId}/settings`, icon: '⚙️', label: 'Settings', match: `/dashboard/projects/${projectId}/settings` },
       ]
     : [];

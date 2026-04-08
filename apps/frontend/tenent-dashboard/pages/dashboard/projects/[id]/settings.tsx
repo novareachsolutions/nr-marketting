@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { AuthGuard } from '@/components/auth/AuthGuard';
@@ -6,6 +6,24 @@ import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
 import { apiClient, showSuccessToast } from '@repo/shared-frontend';
 import styles from './settings.module.css';
+
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const MODULE_LABELS: Record<string, string> = {
+  siteAudit: 'Site Audit',
+  domainOverview: 'Domain Overview',
+  organicRankings: 'Organic Rankings',
+  positionTracking: 'Position Tracking',
+  topPages: 'Top Pages',
+  keywords: 'Keywords',
+};
+
+function formatHour(h: number) {
+  if (h === 0) return '12:00 AM';
+  if (h < 12) return `${h}:00 AM`;
+  if (h === 12) return '12:00 PM';
+  return `${h - 12}:00 PM`;
+}
 
 function SettingsContent() {
   const router = useRouter();
@@ -29,6 +47,19 @@ function SettingsContent() {
   const [ghError, setGhError] = useState('');
   const [ghStatus, setGhStatus] = useState<any>(null);
   const [ghLoaded, setGhLoaded] = useState(false);
+
+  // Report schedule state
+  const [reportSchedule, setReportSchedule] = useState('NONE');
+  const [reportDay, setReportDay] = useState(0);
+  const [reportHour, setReportHour] = useState(2);
+  const [reportModules, setReportModules] = useState<string[]>([]);
+  const [availableModules, setAvailableModules] = useState<Record<string, boolean>>({});
+  const [reportNextAt, setReportNextAt] = useState<string | null>(null);
+  const [reportLastAt, setReportLastAt] = useState<string | null>(null);
+  const [reportSaving, setReportSaving] = useState(false);
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportLoaded, setReportLoaded] = useState(false);
 
   // Load connection statuses
   const loadWpStatus = async () => {
@@ -129,6 +160,70 @@ function SettingsContent() {
       setGhStatus(null);
       refetch();
     } catch {}
+  };
+
+  // Load report settings
+  useEffect(() => {
+    if (!id || reportLoaded) return;
+    apiClient
+      .get(`/projects/${id}/reports/settings`)
+      .then(({ data }) => {
+        if (data.success) {
+          const d = data.data;
+          setReportSchedule(d.reportSchedule || 'NONE');
+          setReportDay(d.reportDay ?? 0);
+          setReportHour(d.reportHour ?? 2);
+          setReportModules(d.reportModules || []);
+          setAvailableModules(d.availableModules || {});
+          setReportNextAt(d.nextReportAt);
+          setReportLastAt(d.lastWeeklyReportAt);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setReportLoaded(true));
+  }, [id, reportLoaded]);
+
+  const handleReportModuleToggle = (mod: string) => {
+    setReportModules((prev) =>
+      prev.includes(mod) ? prev.filter((m) => m !== mod) : [...prev, mod],
+    );
+  };
+
+  const handleSaveReportSettings = async () => {
+    setReportError('');
+    setReportSaving(true);
+    try {
+      const { data } = await apiClient.put(`/projects/${id}/reports/settings`, {
+        reportSchedule,
+        reportDay: reportSchedule === 'WEEKLY' ? reportDay : null,
+        reportHour,
+        reportModules,
+      });
+      if (data.success) {
+        setReportNextAt(data.data.nextReportAt);
+        showSuccessToast('Saved', 'Report schedule updated');
+      }
+    } catch (err: any) {
+      setReportError(err?.response?.data?.message || 'Failed to save settings');
+    } finally {
+      setReportSaving(false);
+    }
+  };
+
+  const handleGenerateNow = async () => {
+    setReportError('');
+    setReportGenerating(true);
+    try {
+      const selectedModules = reportModules.length > 0 ? reportModules : undefined;
+      await apiClient.post(`/projects/${id}/reports/generate`, {
+        modules: selectedModules,
+      });
+      showSuccessToast('Started', 'Report generation started. Check Reports page shortly.');
+    } catch (err: any) {
+      setReportError(err?.response?.data?.message || 'Failed to generate report');
+    } finally {
+      setReportGenerating(false);
+    }
   };
 
   if (isLoading || !project) return <div className={styles.loading}>Loading...</div>;
@@ -277,6 +372,154 @@ function SettingsContent() {
                   </button>
                 </>
               )}
+            </div>
+          </div>
+          {/* ─── Automated SEO Reports Section ─── */}
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <span className={styles.sectionTitle}>Automated SEO Reports</span>
+              <span className={`${styles.statusBadge} ${reportSchedule !== 'NONE' ? styles.connected : styles.disconnected}`}>
+                {reportSchedule !== 'NONE' ? `${reportSchedule}` : 'Off'}
+              </span>
+            </div>
+            <div className={styles.sectionBody}>
+              {reportError && <div className={styles.alertError}>{reportError}</div>}
+
+              <div className={styles.form}>
+                {/* Schedule Toggle */}
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>Frequency</label>
+                  <select
+                    className={styles.formSelect}
+                    value={reportSchedule}
+                    onChange={(e) => setReportSchedule(e.target.value)}
+                  >
+                    <option value="NONE">Off</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                  </select>
+                </div>
+
+                {reportSchedule !== 'NONE' && (
+                  <>
+                    {/* Day of week (only for WEEKLY) */}
+                    {reportSchedule === 'WEEKLY' && (
+                      <div className={styles.formRow}>
+                        <label className={styles.formLabel}>Day of Week</label>
+                        <select
+                          className={styles.formSelect}
+                          value={reportDay}
+                          onChange={(e) => setReportDay(Number(e.target.value))}
+                        >
+                          {DAYS_OF_WEEK.map((day, i) => (
+                            <option key={i} value={i}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Hour */}
+                    <div className={styles.formRow}>
+                      <label className={styles.formLabel}>Time (UTC)</label>
+                      <select
+                        className={styles.formSelect}
+                        value={reportHour}
+                        onChange={(e) => setReportHour(Number(e.target.value))}
+                      >
+                        {HOURS.map((h) => (
+                          <option key={h} value={h}>{formatHour(h)}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Module Checkboxes */}
+                    <div className={styles.formRow}>
+                      <label className={styles.formLabel}>Modules to Include</label>
+                      <div className={styles.moduleList}>
+                        {Object.entries(MODULE_LABELS).map(([key, label]) => {
+                          const isAvailable = availableModules[key] ?? false;
+                          const isChecked = reportModules.includes(key);
+                          return (
+                            <label
+                              key={key}
+                              className={`${styles.moduleItem} ${!isAvailable ? styles.moduleDisabled : ''}`}
+                              title={!isAvailable ? 'Run this module at least once to include it in reports' : ''}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                disabled={!isAvailable}
+                                onChange={() => handleReportModuleToggle(key)}
+                                className={styles.moduleCheckbox}
+                              />
+                              <span className={styles.moduleLabel}>{label}</span>
+                              {!isAvailable && (
+                                <span className={styles.moduleNoData}>No data</span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Action buttons */}
+                <div className={styles.btnRow}>
+                  {reportSchedule !== 'NONE' && (
+                    <button
+                      className={styles.connectBtn}
+                      onClick={handleSaveReportSettings}
+                      disabled={reportSaving}
+                    >
+                      {reportSaving ? 'Saving...' : 'Save Settings'}
+                    </button>
+                  )}
+                  {reportSchedule === 'NONE' && (
+                    <button
+                      className={styles.connectBtn}
+                      onClick={() => {
+                        setReportSchedule('WEEKLY');
+                      }}
+                    >
+                      Enable Reports
+                    </button>
+                  )}
+                  <button
+                    className={styles.generateBtn}
+                    onClick={handleGenerateNow}
+                    disabled={reportGenerating}
+                  >
+                    {reportGenerating ? 'Generating...' : 'Generate Now'}
+                  </button>
+                </div>
+
+                {/* Next report info */}
+                {reportSchedule !== 'NONE' && reportNextAt && (
+                  <p className={styles.reportInfo}>
+                    Next report: {new Date(reportNextAt).toLocaleString('en-US', {
+                      weekday: 'long',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      timeZoneName: 'short',
+                    })}
+                  </p>
+                )}
+                {reportLastAt && (
+                  <p className={styles.reportInfo}>
+                    Last report: {new Date(reportLastAt).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </main>
