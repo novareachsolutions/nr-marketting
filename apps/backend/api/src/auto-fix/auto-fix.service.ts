@@ -36,6 +36,11 @@ const FIXABLE_ISSUE_TYPES = [
   'META_DESCRIPTION_TOO_SHORT',
   'IMAGE_MISSING_ALT',
   'LOW_WORD_COUNT',
+  'MISSING_CANONICAL',
+  'MISSING_STRUCTURED_DATA',
+  'MISSING_OG_IMAGE',
+  'NO_DIRECT_ANSWERS',
+  'WEAK_EEAT_SIGNALS',
 ];
 
 @Injectable()
@@ -250,35 +255,29 @@ export class AutoFixService {
     }
 
     try {
-      // Map URL path to likely file paths in the repo
+      // Get the full repo file tree and find the best matching source file
       const urlPath = new URL(page.url).pathname.replace(/^\/|\/$/g, '');
-      const candidatePaths = this.getCandidateFilePaths(urlPath);
+      const allFiles = await this.githubService.getRepoTree(project.id);
 
-      // Try to find the source file
-      let fileContent: string | null = null;
-      let filePath: string | null = null;
+      const filePath = this.findBestSourceFile(urlPath, allFiles);
 
-      for (const candidate of candidatePaths) {
-        try {
-          const result = await this.githubService.getRepoFile(
-            project.id,
-            candidate,
-          );
-          if (result) {
-            fileContent = result.content;
-            filePath = candidate;
-            break;
-          }
-        } catch {
-          continue;
-        }
-      }
-
-      if (!fileContent || !filePath) {
+      if (!filePath) {
         return {
           fixed: false,
           method: 'github',
-          details: `Could not find the source file for ${page.url} in the repository. Tried paths: ${candidatePaths.join(', ')}`,
+          details: `Could not find the source file for ${page.url} in the repository. Files scanned: ${allFiles.length}`,
+        };
+      }
+
+      let fileContent: string;
+      try {
+        const result = await this.githubService.getRepoFile(project.id, filePath);
+        fileContent = result.content;
+      } catch {
+        return {
+          fixed: false,
+          method: 'github',
+          details: `Found file ${filePath} but could not read its contents.`,
         };
       }
 
@@ -428,8 +427,15 @@ export class AutoFixService {
         messages: [
           {
             role: 'system',
-            content:
+            content: [
               'You are an SEO expert. Fix the following SEO issue in this source file. Return ONLY the complete fixed file content, no explanation or code fences.',
+              'For MISSING_CANONICAL: Add <link rel="canonical" href="..."> in the <head> section.',
+              'For MISSING_STRUCTURED_DATA: Add a <script type="application/ld+json"> block with appropriate JSON-LD schema in the <head>.',
+              'For MISSING_OG_IMAGE: Add <meta property="og:image" content="..."> in the <head>. Use "/og-image.png" as a default if no image URL is evident.',
+              'For NO_DIRECT_ANSWERS: Add concise 40-60 word answer paragraphs right after question-phrased headings.',
+              'For WEAK_EEAT_SIGNALS: Add a section with testimonials, credentials, experience, or trust signals.',
+              'Only modify what is necessary to fix the issue. Preserve all existing code.',
+            ].join(' '),
           },
           {
             role: 'user',
@@ -518,6 +524,21 @@ export class AutoFixService {
       case 'LOW_WORD_COUNT':
         return `${baseInfo}\n\nThe page has low word count (${pageData.wordCount} words). Generate 2-3 additional paragraphs of relevant content to improve SEO. Return JSON: {"content": "...additional content..."}`;
 
+      case 'MISSING_CANONICAL':
+        return `${baseInfo}\n\nThe page is missing a canonical URL tag. Add a <link rel="canonical" href="..."> tag pointing to the canonical URL of this page. Return JSON: {"canonical": "${pageData.url}"}`;
+
+      case 'MISSING_STRUCTURED_DATA':
+        return `${baseInfo}\n\nThe page has no structured data (JSON-LD). Generate appropriate JSON-LD structured data for this page based on its URL, title, and content. For a portfolio/personal site use Person or WebPage schema. Return JSON: {"structuredData": {...}} where the value is valid JSON-LD.`;
+
+      case 'MISSING_OG_IMAGE':
+        return `${baseInfo}\n\nThe page has OG tags but is missing og:image. The fix should add an og:image meta tag. If no specific image URL is known, suggest a placeholder path like "/og-image.png" (1200x630px). Return JSON: {"ogImage": "/og-image.png"}`;
+
+      case 'NO_DIRECT_ANSWERS':
+        return `${baseInfo}\n\nNo concise answer paragraphs found after question headings. Add 40-60 word answer paragraphs directly below question-phrased headings. This is critical for featured snippets. Return JSON: {"content": "...content with question headings and concise answers..."}`;
+
+      case 'WEAK_EEAT_SIGNALS':
+        return `${baseInfo}\n\nPage lacks E-E-A-T trust signals (testimonials, awards, certifications). Add structured content that demonstrates expertise, experience, authoritativeness, and trustworthiness. Return JSON: {"content": "...content with trust signals section..."}`;
+
       default:
         return `${baseInfo}\n\nFix the following SEO issue: ${issueType}. Return the appropriate fix as JSON.`;
     }
@@ -537,48 +558,74 @@ export class AutoFixService {
   }
 
   /**
-   * Map a URL path to likely file paths in a repository.
+   * Find the best matching source file from the repo tree for a given URL path.
    */
-  private getCandidateFilePaths(urlPath: string): string[] {
-    if (!urlPath || urlPath === '') {
-      return ['index.html', 'index.tsx', 'index.jsx', 'src/pages/index.tsx'];
+  private findBestSourceFile(urlPath: string, allFiles: string[]): string | null {
+    // Only consider source files
+    const sourceExts = ['.tsx', '.jsx', '.ts', '.js', '.html', '.astro', '.vue', '.svelte', '.md', '.mdx'];
+    const sourceFiles = allFiles.filter((f) =>
+      sourceExts.some((ext) => f.endsWith(ext)),
+    );
+
+    const slug = urlPath || 'index';
+
+    // Priority 1: Exact match patterns (most specific first)
+    const exactPatterns = urlPath
+      ? [
+          // Next.js app router
+          `app/${urlPath}/page.tsx`, `app/${urlPath}/page.jsx`,
+          `src/app/${urlPath}/page.tsx`, `src/app/${urlPath}/page.jsx`,
+          // Next.js/Gatsby pages router
+          `pages/${urlPath}.tsx`, `pages/${urlPath}.jsx`,
+          `pages/${urlPath}/index.tsx`, `pages/${urlPath}/index.jsx`,
+          `src/pages/${urlPath}.tsx`, `src/pages/${urlPath}.jsx`,
+          `src/pages/${urlPath}/index.tsx`, `src/pages/${urlPath}/index.jsx`,
+          // Direct files
+          `${urlPath}.tsx`, `${urlPath}.jsx`, `${urlPath}.html`,
+          `${urlPath}/index.tsx`, `${urlPath}/index.jsx`, `${urlPath}/index.html`,
+          // Astro
+          `src/pages/${urlPath}.astro`, `src/pages/${urlPath}/index.astro`,
+          // Content files
+          `content/${urlPath}.md`, `content/${urlPath}.mdx`,
+        ]
+      : [
+          // Homepage / root
+          'app/page.tsx', 'app/page.jsx',
+          'src/app/page.tsx', 'src/app/page.jsx',
+          'pages/index.tsx', 'pages/index.jsx',
+          'src/pages/index.tsx', 'src/pages/index.jsx',
+          'src/pages/index.astro',
+          'index.html', 'index.tsx', 'index.jsx',
+          'src/index.html',
+        ];
+
+    for (const pattern of exactPatterns) {
+      if (sourceFiles.includes(pattern)) {
+        return pattern;
+      }
     }
 
-    const candidates: string[] = [];
-    const segments = urlPath.split('/');
-    const fullPath = segments.join('/');
+    // Priority 2: Fuzzy match — find files containing the slug name
+    if (slug !== 'index') {
+      const slugMatches = sourceFiles.filter((f) => {
+        const basename = f.split('/').pop() || '';
+        return basename.startsWith(slug) || f.includes(`/${slug}/`) || f.includes(`/${slug}.`);
+      });
+      if (slugMatches.length > 0) {
+        return slugMatches[0];
+      }
+    }
 
-    // Direct file matches
-    candidates.push(`${fullPath}.html`);
-    candidates.push(`${fullPath}.tsx`);
-    candidates.push(`${fullPath}.jsx`);
-    candidates.push(`${fullPath}/index.html`);
-    candidates.push(`${fullPath}/index.tsx`);
-    candidates.push(`${fullPath}/index.jsx`);
+    // Priority 3: For homepage, find any main entry/layout file
+    if (!urlPath || urlPath === '') {
+      const layoutFiles = sourceFiles.filter((f) =>
+        /\/(page|index|layout|app|home)\.(tsx|jsx|html|astro)$/.test(f),
+      );
+      if (layoutFiles.length > 0) {
+        return layoutFiles[0];
+      }
+    }
 
-    // Common frameworks: pages directory
-    candidates.push(`pages/${fullPath}.tsx`);
-    candidates.push(`pages/${fullPath}.jsx`);
-    candidates.push(`pages/${fullPath}/index.tsx`);
-    candidates.push(`pages/${fullPath}/index.jsx`);
-
-    // src/pages directory (Next.js, Gatsby, etc.)
-    candidates.push(`src/pages/${fullPath}.tsx`);
-    candidates.push(`src/pages/${fullPath}.jsx`);
-    candidates.push(`src/pages/${fullPath}/index.tsx`);
-    candidates.push(`src/pages/${fullPath}/index.jsx`);
-    candidates.push(`src/pages/${fullPath}.astro`);
-
-    // app directory (Next.js 13+)
-    candidates.push(`app/${fullPath}/page.tsx`);
-    candidates.push(`app/${fullPath}/page.jsx`);
-    candidates.push(`src/app/${fullPath}/page.tsx`);
-    candidates.push(`src/app/${fullPath}/page.jsx`);
-
-    // Content/markdown files
-    candidates.push(`content/${fullPath}.md`);
-    candidates.push(`content/${fullPath}.mdx`);
-
-    return candidates;
+    return null;
   }
 }

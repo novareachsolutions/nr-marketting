@@ -217,9 +217,45 @@
   color: #94a3b8;
 }
 
+.crawlCardActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .crawlDate {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.cancelBtn,
+.deleteBtn {
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancelBtn {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+}
+
+.cancelBtn:hover {
+  background: rgba(234, 179, 8, 0.25);
+}
+
+.deleteBtn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.deleteBtn:hover {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .crawlCardBody {

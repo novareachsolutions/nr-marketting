@@ -8,8 +8,8 @@ import { GuideModal } from '@/components/ui/Dialog';
 import { NextStepBar } from '@/components/ui/NextStepBar';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
-import { useAudits, useStartAudit, useScoreHistory } from '@/hooks/useAudits';
-import { showSuccessToast } from '@repo/shared-frontend';
+import { useAudits, useStartAudit, useCancelAudit, useDeleteAudit, useScoreHistory } from '@/hooks/useAudits';
+import { apiClient, showSuccessToast } from '@repo/shared-frontend';
 import type { CrawlJob, CrawlStatus, ScoreHistoryEntry } from '@/types/audit';
 import styles from './index.module.css';
 
@@ -71,6 +71,33 @@ function AuditsContent() {
       queryClient.invalidateQueries({ queryKey: ['project', id] });
     } catch (err: any) {
       setStartError(err?.message || 'Failed to start audit');
+    }
+  };
+
+  const handleCancelAudit = async (e: React.MouseEvent, crawlId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Cancel this running audit?')) return;
+    try {
+      await apiClient.patch(`/projects/${id}/crawls/${crawlId}/cancel`);
+      showSuccessToast('Cancelled', 'Audit has been cancelled.');
+      queryClient.invalidateQueries({ queryKey: ['audits', id] });
+    } catch (err: any) {
+      setStartError(err?.response?.data?.message || 'Failed to cancel audit');
+    }
+  };
+
+  const handleDeleteAudit = async (e: React.MouseEvent, crawlId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm('Delete this audit? All crawl data, pages, and issues will be permanently removed.')) return;
+    try {
+      await apiClient.delete(`/projects/${id}/crawls/${crawlId}`);
+      showSuccessToast('Deleted', 'Audit has been deleted.');
+      queryClient.invalidateQueries({ queryKey: ['audits', id] });
+      queryClient.invalidateQueries({ queryKey: ['scoreHistory', id] });
+    } catch (err: any) {
+      setStartError(err?.response?.data?.message || 'Failed to delete audit');
     }
   };
 
@@ -205,15 +232,35 @@ function AuditsContent() {
                     <span className={`${styles.statusBadge} ${getStatusClass(job.status)}`}>
                       {getStatusLabel(job.status)}
                     </span>
-                    <span className={styles.crawlDate}>
-                      {new Date(job.createdAt).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
+                    <div className={styles.crawlCardActions}>
+                      <span className={styles.crawlDate}>
+                        {new Date(job.createdAt).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      {(job.status === 'RUNNING' || job.status === 'QUEUED') && (
+                        <button
+                          className={styles.cancelBtn}
+                          onClick={(e) => handleCancelAudit(e, job.id)}
+                          title="Cancel this audit"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      {(job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED') && (
+                        <button
+                          className={styles.deleteBtn}
+                          onClick={(e) => handleDeleteAudit(e, job.id)}
+                          title="Delete this audit"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className={styles.crawlCardBody}>

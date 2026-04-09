@@ -162,6 +162,43 @@ function SettingsContent() {
     } catch {}
   };
 
+  const handleGhTestWebhook = async () => {
+    try {
+      const { data } = await apiClient.post(`/projects/${id}/github/test-webhook`);
+      showSuccessToast('Deploy Simulated', data.data?.message || 'Re-crawl triggered');
+    } catch (err: any) {
+      setGhError(err?.response?.data?.message || 'Failed to simulate deploy');
+    }
+  };
+
+  const handleGhRedetectDeploy = async () => {
+    try {
+      const { data } = await apiClient.post(`/projects/${id}/github/redetect-deploy`);
+      showSuccessToast(
+        'Detection Complete',
+        data.data?.deployPlatform
+          ? `Found: ${data.data.deployPlatform} — ${data.data.deployUrl}`
+          : 'No deploy platform detected',
+      );
+      setGhLoaded(false); // reload status
+    } catch (err: any) {
+      setGhError(err?.response?.data?.message || 'Failed to detect deploy platform');
+    }
+  };
+
+  const handleGhVerify = async () => {
+    try {
+      const { data } = await apiClient.post(`/projects/${id}/github/verify`);
+      showSuccessToast(
+        'Verification',
+        data.data?.isValid ? 'Connection is valid' : 'Connection is invalid — please reconnect',
+      );
+      setGhLoaded(false); // reload status
+    } catch (err: any) {
+      setGhError(err?.response?.data?.message || 'Verification failed');
+    }
+  };
+
   // Load report settings
   useEffect(() => {
     if (!id || reportLoaded) return;
@@ -319,16 +356,43 @@ function SettingsContent() {
                     </div>
                     <div className={styles.infoItem}>
                       <span className={styles.infoLabel}>Deploy URL</span>
-                      <span className={styles.infoValue}>{ghStatus.deployUrl || '—'}</span>
+                      <span className={styles.infoValue}>
+                        {ghStatus.deployUrl ? (
+                          <a href={ghStatus.deployUrl} target="_blank" rel="noopener noreferrer">{ghStatus.deployUrl}</a>
+                        ) : '—'}
+                      </span>
+                    </div>
+                    <div className={styles.infoItem}>
+                      <span className={styles.infoLabel}>Deploy Platform</span>
+                      <span className={styles.infoValue}>
+                        {ghStatus.deployPlatform?.replace('_', ' ') || 'Not detected'}
+                      </span>
+                    </div>
+                    <div className={styles.infoItem}>
+                      <span className={styles.infoLabel}>Webhook</span>
+                      <span className={styles.infoValue}>
+                        {ghStatus.hasWebhookSecret ? 'Active (auto re-crawl on deploy)' : 'Not configured'}
+                      </span>
                     </div>
                     <div className={styles.infoItem}>
                       <span className={styles.infoLabel}>Status</span>
                       <span className={styles.infoValue}>{ghStatus.isValid ? 'Valid' : 'Invalid'}</span>
                     </div>
                   </div>
-                  <button className={styles.disconnectBtn} onClick={handleGhDisconnect}>
-                    Disconnect GitHub
-                  </button>
+                  <div className={styles.btnRow} style={{ marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
+                    <button className={styles.connectBtn} onClick={handleGhTestWebhook}>
+                      Simulate Deploy
+                    </button>
+                    <button className={styles.connectBtn} onClick={handleGhRedetectDeploy}>
+                      Detect Platform
+                    </button>
+                    <button className={styles.connectBtn} onClick={handleGhVerify}>
+                      Verify Connection
+                    </button>
+                    <button className={styles.disconnectBtn} onClick={handleGhDisconnect}>
+                      Disconnect GitHub
+                    </button>
+                  </div>
                 </>
               ) : ghRepos.length > 0 ? (
                 <>

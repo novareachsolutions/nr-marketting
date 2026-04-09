@@ -1061,11 +1061,21 @@ export class CrawlerService {
       // Remove fragment
       resolved.hash = '';
 
-      // Remove utm_* params
+      // Normalize hostname: strip www. prefix
+      if (resolved.hostname.startsWith('www.')) {
+        resolved.hostname = resolved.hostname.substring(4);
+      }
+
+      // Remove tracking params (utm_*, fbclid, gclid, etc.)
+      const TRACKING_PARAMS = new Set([
+        'fbclid', 'gclid', 'msclkid', 'mc_cid', 'mc_eid',
+        'dclid', 'yclid', '_ga', '_gl', '_hsenc', '_hsmi',
+        'ref', 'source', 'campaign_id', 'ad_id',
+      ]);
       const params = resolved.searchParams;
       const keysToDelete: string[] = [];
       params.forEach((_, key) => {
-        if (key.startsWith('utm_')) keysToDelete.push(key);
+        if (key.startsWith('utm_') || TRACKING_PARAMS.has(key)) keysToDelete.push(key);
       });
       keysToDelete.forEach((key) => params.delete(key));
 

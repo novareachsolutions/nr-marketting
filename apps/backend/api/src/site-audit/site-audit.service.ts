@@ -576,4 +576,25 @@ export class SiteAuditService {
 
     return { message: 'Crawl cancelled successfully' };
   }
+
+  async deleteCrawl(crawlJobId: string) {
+    const crawlJob = await this.prisma.crawlJob.findUnique({
+      where: { id: crawlJobId },
+    });
+
+    if (!crawlJob) {
+      throw new NotFoundException('Crawl job not found');
+    }
+
+    if (crawlJob.status === 'RUNNING' || crawlJob.status === 'QUEUED') {
+      throw new BadRequestException('Cannot delete a running or queued crawl. Cancel it first.');
+    }
+
+    // Crawl pages + issues are deleted via onDelete: Cascade in schema
+    await this.prisma.crawlJob.delete({
+      where: { id: crawlJobId },
+    });
+
+    return { message: 'Audit deleted successfully' };
+  }
 }

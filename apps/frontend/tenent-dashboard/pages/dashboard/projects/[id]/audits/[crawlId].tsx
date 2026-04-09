@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
-import { useAudit, useCrawlIssues, useCancelAudit, useThematicReports, useCrawlComparison } from '@/hooks/useAudits';
+import { useAudit, useCrawlIssues, useThematicReports, useCrawlComparison } from '@/hooks/useAudits';
 import { apiClient, showSuccessToast } from '@repo/shared-frontend';
 import type { IssueSeverity, CrawlIssue, ThemeReport } from '@/types/audit';
 import { generateAuditPdf } from '@/utils/generateAuditPdf';
@@ -16,6 +16,8 @@ const FIXABLE_TYPES = [
   'TITLE_TOO_LONG', 'TITLE_TOO_SHORT',
   'META_DESCRIPTION_TOO_LONG', 'META_DESCRIPTION_TOO_SHORT',
   'IMAGE_MISSING_ALT', 'LOW_WORD_COUNT',
+  'MISSING_CANONICAL', 'MISSING_STRUCTURED_DATA', 'MISSING_OG_IMAGE',
+  'NO_DIRECT_ANSWERS', 'WEAK_EEAT_SIGNALS',
 ];
 
 type SeverityTab = 'ALL' | IssueSeverity;
@@ -66,8 +68,6 @@ function CrawlDetailContent() {
 
   const { data: project } = useProject(id);
   const { data: crawlJob, isLoading } = useAudit(id, crawlId);
-  const cancelAudit = useCancelAudit();
-
   const [activeTab, setActiveTab] = useState<SeverityTab>('ALL');
   const [issuePage, setIssuePage] = useState(1);
   const [fixingIssue, setFixingIssue] = useState<string | null>(null);
@@ -131,7 +131,7 @@ function CrawlDetailContent() {
   const handleCancel = async () => {
     if (!confirm('Cancel this crawl?')) return;
     try {
-      await cancelAudit.mutateAsync(`/projects/${id}/crawls/${crawlId}`);
+      await apiClient.patch(`/projects/${id}/crawls/${crawlId}/cancel`);
       showSuccessToast('Cancelled', 'Crawl has been cancelled.');
       queryClient.invalidateQueries({ queryKey: ['audit', crawlId] });
       queryClient.invalidateQueries({ queryKey: ['audits', id] });

@@ -18,7 +18,13 @@
       "Bash(netstat -ano)",
       "Bash(pnpm --filter tenent-dashboard add jspdf jspdf-autotable)",
       "Bash(curl -s http://localhost:3000/health)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(where ngrok:*)",
+      "Bash(ngrok version:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(winget list:*)",
+      "Bash(taskkill //PID 4448 //F)",
+      "WebFetch(domain:dribbble.com)"
     ],
     "additionalDirectories": [
       "c:\\Users\\AYAN RAZVI\\nr\\nr-marketting\\apps\\frontend\\tenent-dashboard\\pages\\dashboard\\projects\\[id]",

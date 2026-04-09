@@ -6,16 +6,18 @@ import {
   Param,
   Query,
   Body,
+  Req,
   Res,
   UseGuards,
   HttpCode,
   HttpStatus,
+  RawBodyRequest,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ProjectOwnerGuard } from '../common/guards/project-owner.guard';
-import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { GitHubService } from './github.service';
 
 @Controller()
@@ -23,23 +25,36 @@ export class GitHubController {
   constructor(
     private readonly githubService: GitHubService,
     private readonly config: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
   /**
-   * GET /github/authorize?projectId=...
+   * GET /github/authorize?projectId=...&token=...
    * Redirects user to GitHub OAuth authorization page.
+   * Uses token from query param since this is a browser redirect (no Authorization header).
    */
   @Get('github/authorize')
-  @UseGuards(JwtAuthGuard)
   authorize(
-    @CurrentUser('id') userId: string,
     @Query('projectId') projectId: string,
+    @Query('token') token: string,
     @Res() res: Response,
   ) {
     if (!projectId) {
       return res.status(400).json({ message: 'projectId query param is required' });
     }
 
+    if (!token) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(token);
+    } catch {
+      return res.status(401).json({ message: 'Invalid or expired token' });
+    }
+
+    const userId = payload.sub;
     const url = this.githubService.getAuthorizationUrl(userId, projectId);
     return res.redirect(url);
   }
@@ -60,14 +75,9 @@ export class GitHubController {
     try {
       const result = await this.githubService.handleCallback(code, state);
 
-      // Redirect to frontend with token and project context
-      const params = new URLSearchParams({
-        accessToken: result.accessToken,
-        projectId: result.projectId,
-      });
-
+      // Redirect to settings page with ghToken param (frontend reads this to load repos)
       return res.redirect(
-        `${frontendUrl}/dashboard/projects/${result.projectId}/github/connect?${params.toString()}`,
+        `${frontendUrl}/dashboard/projects/${result.projectId}/settings?ghToken=${result.accessToken}`,
       );
     } catch (err) {
       const errorMessage =
@@ -87,11 +97,11 @@ export class GitHubController {
   @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
   async listRepos(@Query('accessToken') accessToken: string): Promise<any> {
     if (!accessToken) {
-      return { message: 'accessToken query param is required', repos: [] };
+      return { success: false, message: 'accessToken query param is required', data: [] };
     }
 
     const repos = await this.githubService.listRepos(accessToken);
-    return { repos };
+    return { success: true, data: repos };
   }
 
   /**
@@ -130,8 +140,8 @@ export class GitHubController {
   async getStatus(@Param('id') projectId: string) {
     const connection = await this.githubService.getConnection(projectId);
     return {
-      connected: !!connection,
-      connection,
+      success: !!connection,
+      data: connection,
     };
   }
 
@@ -145,5 +155,60 @@ export class GitHubController {
   async disconnect(@Param('id') projectId: string) {
     await this.githubService.disconnect(projectId);
     return { success: true, message: 'GitHub repository disconnected' };
+  }
+
+  /**
+   * POST /projects/:id/github/test-webhook
+   * Simulates a push event for local testing (triggers re-crawl immediately).
+   */
+  @Post('projects/:id/github/test-webhook')
+  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
+  @HttpCode(HttpStatus.OK)
+  async testWebhook(@Param('id') projectId: string) {
+    const data = await this.githubService.simulatePushWebhook(projectId);
+    return { success: true, data };
+  }
+
+  /**
+   * POST /projects/:id/github/redetect-deploy
+   * Re-runs deploy platform detection (Vercel, Netlify, GitHub Pages).
+   */
+  @Post('projects/:id/github/redetect-deploy')
+  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
+  @HttpCode(HttpStatus.OK)
+  async redetectDeploy(@Param('id') projectId: string) {
+    const data = await this.githubService.redetectDeployPlatform(projectId);
+    return { success: true, data };
+  }
+
+  /**
+   * POST /projects/:id/github/verify
+   * Verifies the GitHub connection is still valid (token works, repo accessible).
+   */
+  @Post('projects/:id/github/verify')
+  @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
+  @HttpCode(HttpStatus.OK)
+  async verifyConnection(@Param('id') projectId: string) {
+    const data = await this.githubService.verifyConnection(projectId);
+    return { success: true, data };
+  }
+
+  /**
+   * POST /github/webhook
+   * Public endpoint. Receives push/deployment events from GitHub.
+   * Signature is verified against the per-repo webhook secret.
+   */
+  @Post('github/webhook')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhook(@Req() req: RawBodyRequest<Request>) {
+    const signature = req.headers['x-hub-signature-256'] as string;
+    const rawBody = req.rawBody;
+
+    if (!rawBody || !signature) {
+      return { success: false, error: 'Missing body or signature' };
+    }
+
+    const data = await this.githubService.handleWebhook(rawBody, signature);
+    return { success: true, data };
   }
 }

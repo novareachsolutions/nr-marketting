@@ -3,9 +3,12 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Param,
   Query,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ProjectOwnerGuard } from '../common/guards/project-owner.guard';
@@ -144,9 +147,17 @@ export class SiteAuditController {
     return { success: true, data: result };
   }
 
-  @Delete(':crawlId')
+  @Patch(':crawlId/cancel')
+  @HttpCode(HttpStatus.OK)
   async cancelCrawl(@Param('crawlId') crawlId: string) {
     const result = await this.siteAuditService.cancelCrawl(crawlId);
+    return { success: true, data: result };
+  }
+
+  @Delete(':crawlId')
+  @HttpCode(HttpStatus.OK)
+  async deleteCrawl(@Param('crawlId') crawlId: string) {
+    const result = await this.siteAuditService.deleteCrawl(crawlId);
     return { success: true, data: result };
   }
 }

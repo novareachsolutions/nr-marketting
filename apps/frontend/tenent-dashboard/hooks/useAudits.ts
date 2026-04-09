@@ -32,6 +32,10 @@ export function useStartAudit() {
 }
 
 export function useCancelAudit() {
+  return usePost<{ message: string }>(['audits']);
+}
+
+export function useDeleteAudit() {
   return useDelete<{ message: string }>(['audits']);
 }
 

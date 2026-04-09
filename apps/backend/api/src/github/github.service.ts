@@ -7,7 +7,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { createHmac, randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { SiteAuditService } from '../site-audit/site-audit.service';
 import { encrypt, decrypt } from '../common/utils/encryption';
 
 interface GitHubRepo {
@@ -46,15 +48,18 @@ export class GitHubService {
   private readonly clientId: string;
   private readonly clientSecret: string;
   private readonly redirectUri: string;
+  private readonly apiBaseUrl: string;
   private readonly githubApiBase = 'https://api.github.com';
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly siteAuditService: SiteAuditService,
   ) {
     this.clientId = this.config.getOrThrow<string>('GITHUB_CLIENT_ID');
     this.clientSecret = this.config.getOrThrow<string>('GITHUB_CLIENT_SECRET');
     this.redirectUri = this.config.getOrThrow<string>('GITHUB_REDIRECT_URI');
+    this.apiBaseUrl = this.config.get<string>('API_BASE_URL', 'http://localhost:3000/api');
   }
 
   getAuthorizationUrl(userId: string, projectId: string): string {
@@ -174,6 +179,21 @@ export class GitHubService {
 
     const encryptedToken = encrypt(accessToken);
 
+    // Detect deploy platform from repo contents
+    const { deployUrl, deployPlatform } = await this.detectDeployPlatform(
+      accessToken,
+      owner,
+      name,
+      repoData.default_branch,
+    );
+
+    // Create webhook for push events
+    const { webhookId, webhookSecret } = await this.createRepoWebhook(
+      accessToken,
+      owner,
+      name,
+    );
+
     await this.prisma.$transaction(async (tx) => {
       // Upsert the GitHub connection
       await tx.gitHubConnection.upsert({
@@ -186,6 +206,10 @@ export class GitHubService {
           repoFullName: repoData.full_name,
           defaultBranch: repoData.default_branch,
           repoUrl: repoData.html_url,
+          deployUrl,
+          deployPlatform,
+          webhookId,
+          webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
           isValid: true,
           lastVerifiedAt: new Date(),
         },
@@ -196,6 +220,10 @@ export class GitHubService {
           repoFullName: repoData.full_name,
           defaultBranch: repoData.default_branch,
           repoUrl: repoData.html_url,
+          deployUrl,
+          deployPlatform,
+          webhookId,
+          webhookSecret: webhookSecret ? encrypt(webhookSecret) : null,
           isValid: true,
           lastVerifiedAt: new Date(),
         },
@@ -234,6 +262,19 @@ export class GitHubService {
 
     if (!connection) {
       throw new NotFoundException('No GitHub connection found for this project');
+    }
+
+    // Remove webhook from GitHub
+    if (connection.webhookId) {
+      try {
+        const token = decrypt(connection.accessToken);
+        await axios.delete(
+          `${this.githubApiBase}/repos/${connection.repoOwner}/${connection.repoName}/hooks/${connection.webhookId}`,
+          { headers: this.getGitHubHeaders(token) },
+        );
+      } catch (err) {
+        this.logger.warn(`Failed to delete GitHub webhook ${connection.webhookId}`, err);
+      }
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -350,7 +391,292 @@ export class GitHubService {
     return prResponse.data.html_url;
   }
 
+  /**
+   * List all files in the repo (recursive tree).
+   */
+  async getRepoTree(projectId: string): Promise<string[]> {
+    const connection = await this.getValidConnection(projectId);
+    const token = decrypt(connection.accessToken);
+
+    try {
+      const response = await axios.get(
+        `${this.githubApiBase}/repos/${connection.repoOwner}/${connection.repoName}/git/trees/${connection.defaultBranch}?recursive=1`,
+        { headers: this.getGitHubHeaders(token) },
+      );
+
+      return response.data.tree
+        .filter((item: any) => item.type === 'blob')
+        .map((item: any) => item.path);
+    } catch (err) {
+      this.logger.error('Failed to get repo tree', err);
+      return [];
+    }
+  }
+
+  // ─── Test / Dev Helpers ─────────────────────────────────
+
+  /**
+   * Simulate a GitHub push webhook for local testing (no ngrok needed).
+   * Triggers the same re-crawl logic as a real webhook would.
+   */
+  async simulatePushWebhook(
+    projectId: string,
+  ): Promise<{ action: string; message: string }> {
+    const connection = await this.getValidConnection(projectId);
+
+    this.logger.log(
+      `[TEST] Simulating push to ${connection.defaultBranch} on ${connection.repoFullName}`,
+    );
+
+    // Trigger re-crawl immediately (skip 2-min delay for testing)
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true },
+    });
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    try {
+      await this.siteAuditService.startCrawl(projectId, project.userId, 'free');
+      return {
+        action: 'recrawl_triggered',
+        message: `Deploy simulation: re-crawl triggered for ${connection.repoFullName} (${connection.defaultBranch})`,
+      };
+    } catch (err: any) {
+      return {
+        action: 'recrawl_skipped',
+        message: err?.message || 'Could not start crawl (one may already be running)',
+      };
+    }
+  }
+
+  /**
+   * Re-run deploy platform detection for an existing connection.
+   */
+  async redetectDeployPlatform(projectId: string) {
+    const connection = await this.getValidConnection(projectId);
+    const token = decrypt(connection.accessToken);
+
+    const { deployUrl, deployPlatform } = await this.detectDeployPlatform(
+      token,
+      connection.repoOwner,
+      connection.repoName,
+      connection.defaultBranch,
+    );
+
+    await this.prisma.gitHubConnection.update({
+      where: { projectId },
+      data: { deployUrl, deployPlatform },
+    });
+
+    return { deployUrl, deployPlatform };
+  }
+
+  /**
+   * Verify the GitHub connection is still valid by making an API call.
+   */
+  async verifyConnection(projectId: string) {
+    const connection = await this.getValidConnection(projectId);
+    const token = decrypt(connection.accessToken);
+
+    try {
+      const response = await axios.get(
+        `${this.githubApiBase}/repos/${connection.repoOwner}/${connection.repoName}`,
+        { headers: this.getGitHubHeaders(token) },
+      );
+
+      await this.prisma.gitHubConnection.update({
+        where: { projectId },
+        data: {
+          isValid: true,
+          lastVerifiedAt: new Date(),
+          defaultBranch: response.data.default_branch,
+        },
+      });
+
+      return {
+        isValid: true,
+        repoFullName: connection.repoFullName,
+        defaultBranch: response.data.default_branch,
+        lastVerifiedAt: new Date().toISOString(),
+      };
+    } catch {
+      await this.prisma.gitHubConnection.update({
+        where: { projectId },
+        data: { isValid: false },
+      });
+
+      return {
+        isValid: false,
+        repoFullName: connection.repoFullName,
+        error: 'Token may have been revoked or repo is no longer accessible',
+      };
+    }
+  }
+
+  // ─── Webhook Handling ─────────────────────────────────
+
+  async handleWebhook(
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<{ received: boolean; action?: string }> {
+    const payload = JSON.parse(rawBody.toString('utf-8'));
+
+    // Determine repo from payload
+    const repoFullName = payload.repository?.full_name;
+    if (!repoFullName) {
+      throw new BadRequestException('Missing repository in webhook payload');
+    }
+
+    // Find the connection for this repo
+    const connection = await this.prisma.gitHubConnection.findFirst({
+      where: { repoFullName, isValid: true },
+    });
+
+    if (!connection || !connection.webhookSecret) {
+      throw new BadRequestException('No matching connection for this webhook');
+    }
+
+    // Verify signature
+    const secret = decrypt(connection.webhookSecret);
+    const expectedSignature =
+      'sha256=' +
+      createHmac('sha256', secret).update(rawBody).digest('hex');
+
+    if (signature !== expectedSignature) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+
+    // Handle push to default branch → trigger re-crawl
+    const ref = payload.ref;
+    const defaultBranchRef = `refs/heads/${connection.defaultBranch}`;
+
+    if (ref === defaultBranchRef) {
+      this.logger.log(
+        `Deploy detected: push to ${connection.defaultBranch} on ${repoFullName}`,
+      );
+
+      // Wait 2 minutes for deploy to propagate, then trigger re-crawl
+      const projectId = connection.projectId;
+      setTimeout(async () => {
+        try {
+          // Find the project owner to pass as userId
+          const project = await this.prisma.project.findUnique({
+            where: { id: projectId },
+            select: { userId: true },
+          });
+
+          if (project) {
+            await this.siteAuditService.startCrawl(
+              projectId,
+              project.userId,
+              'free',
+            );
+            this.logger.log(`Auto re-crawl triggered for project ${projectId}`);
+          }
+        } catch (err) {
+          this.logger.error(`Failed to auto re-crawl project ${projectId}`, err);
+        }
+      }, 2 * 60 * 1000);
+
+      return { received: true, action: 'recrawl_scheduled' };
+    }
+
+    return { received: true };
+  }
+
   // ---- Private helpers ----
+
+  private async createRepoWebhook(
+    accessToken: string,
+    owner: string,
+    name: string,
+  ): Promise<{ webhookId: string | null; webhookSecret: string | null }> {
+    try {
+      const webhookSecret = randomBytes(32).toString('hex');
+      const response = await axios.post(
+        `${this.githubApiBase}/repos/${owner}/${name}/hooks`,
+        {
+          name: 'web',
+          active: true,
+          events: ['push', 'deployment_status'],
+          config: {
+            url: `${this.apiBaseUrl}/github/webhook`,
+            content_type: 'json',
+            secret: webhookSecret,
+            insecure_ssl: '0',
+          },
+        },
+        { headers: this.getGitHubHeaders(accessToken) },
+      );
+
+      return {
+        webhookId: String(response.data.id),
+        webhookSecret,
+      };
+    } catch (err) {
+      this.logger.warn('Failed to create GitHub webhook — deploy detection will be unavailable', err);
+      return { webhookId: null, webhookSecret: null };
+    }
+  }
+
+  private async detectDeployPlatform(
+    accessToken: string,
+    owner: string,
+    name: string,
+    defaultBranch: string,
+  ): Promise<{ deployUrl: string | null; deployPlatform: any }> {
+    const headers = this.getGitHubHeaders(accessToken);
+    const repoBase = `${this.githubApiBase}/repos/${owner}/${name}`;
+
+    // Check for Vercel (vercel.json)
+    try {
+      await axios.get(`${repoBase}/contents/vercel.json?ref=${defaultBranch}`, { headers });
+      return {
+        deployUrl: `https://${name}.vercel.app`,
+        deployPlatform: 'VERCEL',
+      };
+    } catch {}
+
+    // Check for Netlify (netlify.toml)
+    try {
+      await axios.get(`${repoBase}/contents/netlify.toml?ref=${defaultBranch}`, { headers });
+      return {
+        deployUrl: `https://${name}.netlify.app`,
+        deployPlatform: 'NETLIFY',
+      };
+    } catch {}
+
+    // Check for GitHub Pages (CNAME file)
+    try {
+      const cnameRes = await axios.get(
+        `${repoBase}/contents/CNAME?ref=${defaultBranch}`,
+        { headers },
+      );
+      const cname = Buffer.from(cnameRes.data.content, 'base64').toString('utf-8').trim();
+      if (cname) {
+        return {
+          deployUrl: `https://${cname}`,
+          deployPlatform: 'GITHUB_PAGES',
+        };
+      }
+    } catch {}
+
+    // Check GitHub Pages via repo settings
+    try {
+      const pagesRes = await axios.get(`${repoBase}/pages`, { headers });
+      if (pagesRes.data?.html_url) {
+        return {
+          deployUrl: pagesRes.data.html_url,
+          deployPlatform: 'GITHUB_PAGES',
+        };
+      }
+    } catch {}
+
+    return { deployUrl: null, deployPlatform: null };
+  }
 
   private async getValidConnection(projectId: string) {
     const connection = await this.prisma.gitHubConnection.findUnique({
