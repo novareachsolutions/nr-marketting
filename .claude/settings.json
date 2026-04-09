@@ -18,14 +18,7 @@
       "Bash(netstat -ano)",
       "Bash(pnpm --filter tenent-dashboard add jspdf jspdf-autotable)",
       "Bash(curl -s http://localhost:3000/health)",
-      "Read(//c/Users/AYAN RAZVI/nr/nr-marketting/apps/frontend/tenent-dashboard/**)",
-      "Read(//c/Users/AYAN/ RAZVI/nr/nr-marketting/**)",
-      "Read(//c/Users/AYAN RAZVI/nr/movemate/**)",
-      "Read(//c/Users/AYAN RAZVI/nr/nrpos/**)",
-      "Read(//c/Users/AYAN RAZVI/nr/**)",
-      "Bash(xargs grep:*)",
-      "Bash(PGPASSWORD=postgres psql -h localhost -U postgres -d nr_marketing_db -c \"DELETE FROM ai_suggestions_cache WHERE cache_key LIKE 'suggest-competitors%';\")",
-      "Bash(find \"c:\\\\Users\\\\AYAN RAZVI\\\\nr\\\\nr-marketting\\\\apps\\\\frontend\\\\tenent-dashboard\\\\pages\\\\dashboard\\\\projects\\\\[id]\" -name \"keywords.tsx\" -exec head -100 {} \\\\;)"
+      "Bash(docker compose:*)"
     ],
     "additionalDirectories": [
       "c:\\Users\\AYAN RAZVI\\nr\\nr-marketting\\apps\\frontend\\tenent-dashboard\\pages\\dashboard\\projects\\[id]",
