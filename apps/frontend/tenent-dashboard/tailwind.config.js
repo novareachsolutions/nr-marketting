@@ -20,6 +20,7 @@ module.exports = {
           DEFAULT: 'var(--border-primary)',
           input: 'var(--border-input)',
           focus: 'var(--border-focus)',
+          dashed: 'var(--border-dashed)',
         },
         text: {
           primary: 'var(--text-primary)',
@@ -38,6 +39,13 @@ module.exports = {
           'warning-light': 'var(--accent-warning-light)',
           danger: 'var(--accent-danger)',
           'danger-light': 'var(--accent-danger-light)',
+          info: 'var(--accent-info)',
+          'info-light': 'var(--accent-info-light)',
+        },
+        sidebar: {
+          bg: 'var(--sidebar-bg)',
+          'active-bg': 'var(--sidebar-active-bg)',
+          'active-border': 'var(--sidebar-active-border)',
         },
       },
       borderRadius: {
