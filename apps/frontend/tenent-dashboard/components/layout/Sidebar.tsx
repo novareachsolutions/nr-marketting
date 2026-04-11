@@ -21,6 +21,7 @@ import {
   ClipboardList,
   Compass,
   Key,
+  Lightbulb,
 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -63,6 +64,7 @@ export function Sidebar({ projectId }: SidebarProps) {
     { href: '/dashboard/compare-domains', icon: <BarChart3 size={18} />, label: 'Compare Domains', match: '/dashboard/compare-domains' },
     { href: '/dashboard/keyword-gap', icon: <GitCompareArrows size={18} />, label: 'Keyword Gap', match: '/dashboard/keyword-gap' },
     { href: '/dashboard/backlink-gap', icon: <Link2 size={18} />, label: 'Backlink Gap', match: '/dashboard/backlink-gap' },
+    { href: '/dashboard/topic-research', icon: <Lightbulb size={18} />, label: 'Topic Research', match: '/dashboard/topic-research' },
   ];
 
   const mainLinks: SidebarLink[] = [
@@ -89,6 +91,7 @@ export function Sidebar({ projectId }: SidebarProps) {
         { href: `/dashboard/projects/${projectId}/compare-domains`, icon: <BarChart3 size={18} />, label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
         { href: `/dashboard/projects/${projectId}/keyword-gap`, icon: <GitCompareArrows size={18} />, label: 'Keyword Gap', match: `/dashboard/projects/${projectId}/keyword-gap` },
         { href: `/dashboard/projects/${projectId}/backlink-gap`, icon: <Link2 size={18} />, label: 'Backlink Gap', match: `/dashboard/projects/${projectId}/backlink-gap` },
+        { href: `/dashboard/topic-research?projectId=${projectId}`, icon: <Lightbulb size={18} />, label: 'Topic Research', match: `/dashboard/topic-research` },
         { href: `/dashboard/projects/${projectId}/reports`, icon: <FileText size={18} />, label: 'Reports', match: `/dashboard/projects/${projectId}/reports` },
         { href: `/dashboard/projects/${projectId}/settings`, icon: <Settings size={18} />, label: 'Settings', match: `/dashboard/projects/${projectId}/settings` },
       ]

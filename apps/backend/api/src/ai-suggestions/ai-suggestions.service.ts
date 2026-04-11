@@ -41,7 +41,14 @@ export class AiSuggestionsService {
       return cached.data as unknown as { suggestions: string[] };
     }
 
-    // For competitor suggestions, scrape the domain to understand the business
+    // For topic research and competitor suggestions, scrape the domain to understand the business
+    if (module === 'topic-research' && context.domain) {
+      const siteDescription = await this.scrapeDomainDescription(context.domain);
+      if (siteDescription) {
+        context = { ...context, siteDescription };
+      }
+    }
+
     if (module === 'suggest-competitors' && context.domain) {
       const siteDescription = await this.scrapeDomainDescription(context.domain);
       if (siteDescription) {
@@ -51,7 +58,7 @@ export class AiSuggestionsService {
 
     const systemPrompt = this.getSystemPrompt(module);
     const userPrompt = this.getUserPrompt(module, context);
-    const model = module === 'suggest-competitors' ? 'gpt-4o' : 'gpt-4o-mini';
+    const model = (module === 'suggest-competitors' || module === 'topic-research') ? 'gpt-4o' : 'gpt-4o-mini';
 
     try {
       const response = await axios.post(
@@ -106,13 +113,21 @@ export class AiSuggestionsService {
       'keyword-gap': `You are an SEO consultant analyzing keyword gaps. Based on the gap analysis, give 3-5 specific, actionable suggestions for closing keyword gaps. Focus on missing keywords, content creation priorities, and quick wins.`,
       'backlink-gap': `You are an SEO consultant analyzing backlink gaps. Based on the referring domain analysis, give 3-5 specific, actionable suggestions for link building outreach. Focus on high-authority prospects and outreach strategy.`,
       'keyword-research': `You are an SEO consultant analyzing keyword research data. Based on the keyword metrics, give 3-5 specific, actionable suggestions for keyword targeting strategy. Focus on difficulty, intent, and content planning.`,
+      'topic-research-insights': `You are an SEO content strategist analyzing topic research results. Based on the topic clusters, their search volumes, difficulty scores, and efficiency ratings, give 3-5 specific, actionable suggestions for content planning. Focus on which topics to prioritize, content gaps, and how to structure topic clusters for maximum organic traffic.`,
+      'topic-research': `You are an SEO content strategist specializing in topic research and content planning. Given a domain and its competitors, suggest 5 high-potential topic clusters that the domain should create content about. For each topic, include the main topic name, 3-4 specific related keywords to target, and a brief reason why this topic is a good fit for the domain. Focus on topics with high search volume potential and low to medium competition. Return JSON with this EXACT structure: {"suggestions":[{"topic":"main topic name","keywords":["keyword 1","keyword 2","keyword 3"],"reason":"Brief reason why this topic fits the domain"}]}`,
       'suggest-competitors': `You are an SEO competitive analyst. You will be given a domain along with a description of what the website actually does (scraped from the site). Use this description to understand the business's exact products, services, and target market. Then suggest 5 competitor domains that DIRECTLY compete for the same customers and keywords in the same specific niche. IMPORTANT: Suggest competitors that are at a SIMILAR business level and scale — NOT industry giants or market leaders. The competitors should be businesses realistically fighting for the same customers and search rankings. Do NOT suggest generic or loosely related sites. Return JSON with this EXACT structure: {"suggestions":[{"domain":"competitor1.com","reason":"Brief reason why they compete","authorityScore":35,"organicTraffic":12000,"organicKeywords":850,"backlinks":3200}]}. For each competitor, estimate realistic SEO metrics based on your knowledge. authorityScore is 0-100, organicTraffic is estimated monthly visits, organicKeywords is number of ranking keywords, backlinks is total backlink count. Make metrics realistic for similar-scale businesses.`,
     };
     return (prompts[module] || prompts['domain-overview']) +
-      (module === 'suggest-competitors' ? '' : ` Return JSON: {"suggestions":["<suggestion 1>","<suggestion 2>","<suggestion 3>"]}. Each suggestion should be 1-2 sentences, specific, and actionable. Reference actual numbers from the data.`);
+      (module === 'suggest-competitors' || module === 'topic-research' ? '' : ` Return JSON: {"suggestions":["<suggestion 1>","<suggestion 2>","<suggestion 3>"]}. Each suggestion should be 1-2 sentences, specific, and actionable. Reference actual numbers from the data.`);
   }
 
   private getUserPrompt(module: string, context: Record<string, any>): string {
+    if (module === 'topic-research') {
+      const domain = context.domain || '';
+      const competitors = context.competitors?.length > 0 ? context.competitors.join(', ') : 'none provided';
+      const siteDescription = context.siteDescription || 'No description available';
+      return `Suggest topic clusters for: ${domain}\n\nSite description:\n${siteDescription}\n\nCompetitors: ${competitors}\n\nSuggest 5 topic clusters this domain should create content about to improve organic traffic.`;
+    }
     if (module === 'suggest-competitors') {
       const domain = context.domain || '';
       const siteDescription = context.siteDescription || 'No description available';

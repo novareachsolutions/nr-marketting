@@ -24,6 +24,7 @@ import { KeywordGapModule } from './keyword-gap/keyword-gap.module';
 import { BacklinkGapModule } from './backlink-gap/backlink-gap.module';
 import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
 import { ReportsModule } from './reports/reports.module';
+import { TopicResearchModule } from './topic-research/topic-research.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ReportsModule } from './reports/reports.module';
     BacklinkGapModule,
     AiSuggestionsModule,
     ReportsModule,
+    TopicResearchModule,
   ],
   controllers: [AppController],
   providers: [

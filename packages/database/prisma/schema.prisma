@@ -848,3 +848,22 @@ model Report {
   @@index([projectId, createdAt(sort: Desc)])
   @@map("reports")
 }
+
+// ============================================
+// TOPIC RESEARCH CACHE
+// ============================================
+
+model TopicCache {
+  id             String   @id @default(cuid())
+  topic          String
+  country        String   @default("US")
+  searchVolume   Int?     @map("search_volume")
+  difficulty     Int?     // 0-100
+  cpc            Float?   // USD
+  topicEfficiency Int?    @map("topic_efficiency") // 0-100
+  subtopicCount  Int?     @map("subtopic_count")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([topic, country])
+  @@map("topic_cache")
+}
