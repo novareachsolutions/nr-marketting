@@ -1,0 +1,487 @@
+.layout {
+  min-height: 100vh;
+  background: var(--bg-secondary);
+}
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.pageTitle {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.pageSubtitle {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  margin: 0 0 24px 2px;
+}
+
+.guideBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-card);
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─── Search Form ──────────────────────────────────────── */
+.searchForm {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.searchInput {
+  flex: 1;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.searchInput:focus {
+  border-color: var(--accent-primary);
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.countrySelect {
+  width: 70px;
+  height: 44px;
+  padding: 0 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.searchBtn {
+  height: 44px;
+  padding: 0 24px;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.searchBtn:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.searchBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── States ──────────────────────────────────────────── */
+.loadingState {
+  text-align: center;
+  padding: 64px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.errorState {
+  text-align: center;
+  padding: 32px;
+  color: #ef4444;
+  font-size: 14px;
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 10px;
+}
+
+.emptyState {
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--text-tertiary);
+}
+
+.emptyTitle {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.emptyText {
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.6;
+  font-size: 13px;
+}
+
+/* ─── Domain Header ──────────────────────────────────── */
+.domainHeader {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--bg-card);
+  margin-bottom: 16px;
+}
+
+.authGauge {
+  flex-shrink: 0;
+}
+
+.domainMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.domainLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.domainName {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 2px;
+  word-break: break-all;
+}
+
+.domainBadges {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.badge {
+  padding: 2px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* ─── Metric Cards ───────────────────────────────────── */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.metricCard {
+  padding: 14px 16px;
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.metricLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metricValue {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 4px;
+}
+
+.metricSub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.metricDelta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.deltaUp {
+  color: #22c55e;
+}
+
+.deltaDown {
+  color: #ef4444;
+}
+
+/* ─── Section Card ──────────────────────────────────── */
+.section {
+  padding: 16px 20px;
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  background: var(--bg-card);
+  margin-bottom: 16px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionHint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ─── Two Column ────────────────────────────────────── */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+/* ─── Tables ────────────────────────────────────────── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table thead th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-primary);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: 10px;
+}
+
+.table tbody td {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tableDomain {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tableMuted {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.scoreChip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  min-width: 28px;
+  text-align: center;
+}
+
+.chipFollow {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.chipNofollow {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sourceLink {
+  color: var(--accent-primary);
+  text-decoration: none;
+  word-break: break-all;
+  font-size: 12px;
+}
+
+.sourceLink:hover {
+  text-decoration: underline;
+}
+
+.anchorText {
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ─── Anchor Bar List ──────────────────────────────── */
+.anchorList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.anchorRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.anchorLabel {
+  color: var(--text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anchorCount {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.anchorBar {
+  grid-column: 1 / -1;
+  height: 5px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.anchorBarFill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+/* ─── Distribution bar rows ────────────────────────── */
+.distRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.distLabel {
+  width: 100px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.distBar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.distBarFill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 3px;
+}
+
+.distValue {
+  width: 70px;
+  text-align: right;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ─── Chart wrapper ─────────────────────────────────── */
+.chartWrap {
+  width: 100%;
+  height: 220px;
+}
+
+@media (max-width: 1024px) {
+  .metricsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .twoCol {
+    grid-template-columns: 1fr;
+  }
+}

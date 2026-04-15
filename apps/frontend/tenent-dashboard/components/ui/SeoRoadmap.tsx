@@ -48,7 +48,7 @@ export function SeoRoadmap({ projectId, domain, counts, competitorCount, hasDoma
   const progressPercent = Math.round((completedCount / steps.length) * 100);
 
   return (
-    <div className="border border-border rounded-lg bg-bg-card overflow-hidden">
+    <div className="border border-border rounded-lg bg-bg-card overflow-hidden mb-6">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
         <div className="flex items-center gap-3">

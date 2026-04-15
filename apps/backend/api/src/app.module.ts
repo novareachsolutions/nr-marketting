@@ -22,9 +22,13 @@ import { TopPagesModule } from './top-pages/top-pages.module';
 import { CompareDomainsModule } from './compare-domains/compare-domains.module';
 import { KeywordGapModule } from './keyword-gap/keyword-gap.module';
 import { BacklinkGapModule } from './backlink-gap/backlink-gap.module';
+import { BacklinksModule } from './backlinks/backlinks.module';
+import { BacklinkAuditModule } from './backlink-audit/backlink-audit.module';
 import { AiSuggestionsModule } from './ai-suggestions/ai-suggestions.module';
 import { ReportsModule } from './reports/reports.module';
 import { TopicResearchModule } from './topic-research/topic-research.module';
+import { WritingAssistantModule } from './writing-assistant/writing-assistant.module';
+import { SeoContentTemplateModule } from './seo-content-template/seo-content-template.module';
 
 @Module({
   imports: [
@@ -55,9 +59,13 @@ import { TopicResearchModule } from './topic-research/topic-research.module';
     CompareDomainsModule,
     KeywordGapModule,
     BacklinkGapModule,
+    BacklinksModule,
+    BacklinkAuditModule,
     AiSuggestionsModule,
     ReportsModule,
     TopicResearchModule,
+    WritingAssistantModule,
+    SeoContentTemplateModule,
   ],
   controllers: [AppController],
   providers: [

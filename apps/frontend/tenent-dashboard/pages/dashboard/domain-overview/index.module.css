@@ -104,7 +104,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   padding: 24px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .authorityGauge {
@@ -154,7 +154,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .metricCard {
@@ -235,7 +235,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   padding: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .chartTitle {
@@ -249,7 +249,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 /* ─── Data Tables ─────────────────────────────────────── */
@@ -258,7 +258,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .tableSectionHeader {

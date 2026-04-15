@@ -23,7 +23,7 @@ const getBaseURL = () => {
 const apiClient: AxiosInstance = axios.create({
   baseURL: getBaseURL(),
   headers: { Accept: 'application/json' },
-  timeout: 30_000,
+  timeout: 120_000,
   withCredentials: true,
 });
 

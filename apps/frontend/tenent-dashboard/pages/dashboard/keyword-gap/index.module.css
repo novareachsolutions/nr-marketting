@@ -169,7 +169,7 @@
 .summaryGrid {
   display: flex;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   overflow-x: auto;
 }
 

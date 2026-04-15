@@ -1,0 +1,101 @@
+.editor {
+  min-height: 400px;
+  padding: 16px;
+  outline: none;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  overflow-y: auto;
+}
+
+.editor h1 {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-primary);
+  margin: 14px 0 8px;
+}
+
+.editor h2 {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-primary);
+  margin: 12px 0 6px;
+}
+
+.editor h3 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin: 10px 0 4px;
+}
+
+.editor h1:first-child,
+.editor h2:first-child,
+.editor h3:first-child {
+  margin-top: 0;
+}
+
+.editor p {
+  margin: 0 0 10px;
+}
+
+.editor p:last-child {
+  margin-bottom: 0;
+}
+
+.editor ul,
+.editor ol {
+  margin: 8px 0 12px;
+  padding-left: 24px;
+}
+
+.editor ul {
+  list-style: disc outside;
+}
+
+.editor ol {
+  list-style: decimal outside;
+}
+
+.editor li {
+  margin: 4px 0;
+}
+
+.editor li > ul,
+.editor li > ol {
+  margin: 4px 0;
+}
+
+.editor a {
+  color: var(--accent-primary, #22c55e);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.editor strong,
+.editor b {
+  font-weight: 700;
+}
+
+.editor em,
+.editor i {
+  font-style: italic;
+}
+
+.editor blockquote {
+  border-left: 3px solid var(--border-primary);
+  margin: 10px 0;
+  padding: 4px 0 4px 14px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.editor:empty::before,
+.editor p:only-child:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+}

@@ -167,7 +167,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .comparisonTableWrap {
@@ -234,7 +234,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   padding: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .chartTitle {
@@ -248,7 +248,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 /* ─── Overlap Cards ───────────────────────────────────── */
@@ -256,7 +256,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .overlapCard {
@@ -290,7 +290,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .tableSectionHeader {

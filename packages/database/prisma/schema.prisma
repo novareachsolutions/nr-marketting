@@ -50,7 +50,10 @@ enum UsageMetric {
   COMPARE_DOMAINS
   KEYWORD_GAP
   BACKLINK_GAP
+  BACKLINKS
+  BACKLINK_AUDIT
   AI_SUGGESTIONS
+  SEO_WRITING_ASSISTANT
 }
 
 enum Device {
@@ -249,11 +252,14 @@ model User {
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  subscription     Subscription?
-  googleConnection GoogleConnection?
-  projects         Project[]
-  refreshTokens    RefreshToken[]
-  usageRecords     UsageRecord[]
+  subscription      Subscription?
+  googleConnection  GoogleConnection?
+  projects          Project[]
+  refreshTokens     RefreshToken[]
+  usageRecords      UsageRecord[]
+  writingDocuments  WritingDocument[]
+  seoContentBriefs  SeoContentBrief[]
+  backlinkAuditJobs BacklinkAuditJob[]
 
   @@map("users")
 }
@@ -352,6 +358,8 @@ model Project {
   reports             Report[]
   wordpressConnection WordPressConnection?
   githubConnection    GitHubConnection?
+  writingDocuments    WritingDocument[]
+  seoContentBriefs    SeoContentBrief[]
 
   @@unique([userId, domain])
   @@index([userId])
@@ -590,6 +598,91 @@ model BacklinkGapCache {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("backlink_gap_cache")
+}
+
+// ============================================
+// BACKLINKS ANALYTICS CACHE
+// ============================================
+
+model BacklinksCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("backlinks_cache")
+}
+
+// ============================================
+// BACKLINK AUDIT (Persisted — not just cache)
+// ============================================
+
+model BacklinkAuditJob {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  domain            String
+  country           String   @default("US")
+
+  // Aggregate scores
+  toxicityScore     Float    @default(0) @map("toxicity_score") // 0-100
+  authorityScore    Float    @default(0) @map("authority_score") // 0-100 (weighted avg of sources)
+
+  // Counts
+  totalLinks        Int      @default(0) @map("total_links")
+  totalDomains      Int      @default(0) @map("total_domains")
+  toxicCount        Int      @default(0) @map("toxic_count")
+  suspiciousCount   Int      @default(0) @map("suspicious_count")
+  cleanCount        Int      @default(0) @map("clean_count")
+
+  // Structured data blobs from the AI call
+  insights          Json?    // [{ severity, title, description, action }]
+  distribution      Json?    // { toxicity buckets, authority buckets, tld, anchor, etc. }
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links             BacklinkAuditLink[]
+
+  @@index([userId])
+  @@index([domain])
+  @@index([createdAt])
+  @@map("backlink_audit_jobs")
+}
+
+model BacklinkAuditLink {
+  id             String   @id @default(cuid())
+  jobId          String   @map("job_id")
+
+  sourceUrl      String   @map("source_url") @db.Text
+  sourceTitle    String?  @map("source_title") @db.Text
+  sourceDomain   String   @map("source_domain")
+  targetUrl      String   @map("target_url") @db.Text
+  anchor         String   @db.Text
+  linkType       String   @default("follow") @map("link_type") // follow | nofollow
+  category       String?  // Technology | News | Blog | ...
+  tld            String?  // .com | .org | ...
+  firstSeen      String?  @map("first_seen") // ISO date from AI
+
+  // Quality metrics
+  sourceAuthority Int     @default(0) @map("source_authority") // 0-100
+  toxicityScore   Int     @default(0) @map("toxicity_score") // 0-100
+  toxicityLevel   String  @default("clean") @map("toxicity_level") // clean | suspicious | toxic
+  riskFactors     Json?   @map("risk_factors") // string[]
+
+  // User workflow
+  status         String   @default("pending") // pending | keep | flag | disavow
+  userNote       String?  @map("user_note") @db.Text
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  job            BacklinkAuditJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([jobId, status])
+  @@index([jobId, toxicityLevel])
+  @@map("backlink_audit_links")
 }
 
 // ============================================
@@ -866,4 +959,94 @@ model TopicCache {
 
   @@unique([topic, country])
   @@map("topic_cache")
+}
+
+// ============================================
+// SEO WRITING ASSISTANT
+// ============================================
+
+model WritingDocument {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  projectId        String?  @map("project_id")
+  title            String   @default("Untitled")
+  content          String   @db.Text
+  plainText        String   @map("plain_text") @db.Text
+  targetKeywords   Json?    @map("target_keywords")
+  metaDescription  String?  @map("meta_description")
+
+  readabilityScore Float?   @map("readability_score")
+  seoScore         Float?   @map("seo_score")
+  originalityScore Float?   @map("originality_score")
+  toneScore        Float?   @map("tone_score")
+  overallScore     Float?   @map("overall_score")
+  targetTone       String?  @map("target_tone")
+  wordCount        Int      @default(0) @map("word_count")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("writing_documents")
+}
+
+model WritingAiCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("writing_ai_cache")
+}
+
+// ============================================
+// SEO CONTENT TEMPLATE
+// ============================================
+
+model SeoContentBrief {
+  id                   String   @id @default(cuid())
+  userId               String   @map("user_id")
+  projectId            String?  @map("project_id")
+
+  // Inputs
+  targetKeywords       Json     @map("target_keywords")    // string[]
+  country              String   @default("US")
+
+  // GPT-generated brief
+  topRivals            Json     @map("top_rivals")         // RivalItem[]
+  backlinkTargets      Json     @map("backlink_targets")   // string[]
+  semanticKeywords     Json     @map("semantic_keywords")  // string[]
+  avgReadability       Int      @map("avg_readability")
+  recommendedWordCount Int      @map("recommended_word_count")
+
+  titleSuggestion      String   @map("title_suggestion")
+  metaSuggestion       String   @map("meta_suggestion")
+  h1Suggestion         String   @map("h1_suggestion")
+
+  status               String   @default("ready") // ready | generating | failed
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@index([projectId])
+  @@map("seo_content_briefs")
+}
+
+model SeoBriefCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("seo_brief_cache")
 }
