@@ -21,6 +21,12 @@ enum Role {
   SUPER_ADMIN
 }
 
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum Plan {
   FREE
   PRO
@@ -237,19 +243,24 @@ enum DeployPlatform {
 // ============================================
 
 model User {
-  id                  String    @id @default(cuid())
-  email               String    @unique
-  passwordHash        String    @map("password_hash")
+  id                  String      @id @default(cuid())
+  email               String      @unique
+  passwordHash        String      @map("password_hash")
   name                String?
-  role                Role      @default(USER)
-  isEmailVerified     Boolean   @default(false) @map("is_email_verified")
-  emailVerifyToken    String?   @map("email_verify_token")
-  passwordResetToken  String?   @map("password_reset_token")
-  passwordResetExpiry DateTime? @map("password_reset_expiry")
-  avatarUrl           String?   @map("avatar_url")
-  timezone            String    @default("UTC")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  role                Role        @default(USER)
+  isEmailVerified     Boolean     @default(false) @map("is_email_verified")
+  emailVerifyToken    String?     @map("email_verify_token")
+  passwordResetToken  String?     @map("password_reset_token")
+  passwordResetExpiry DateTime?   @map("password_reset_expiry")
+  avatarUrl           String?     @map("avatar_url")
+  timezone            String      @default("UTC")
+  approvalStatus      ApprovalStatus @default(PENDING) @map("approval_status")
+  approvedAt          DateTime?   @map("approved_at")
+  approvedById        String?     @map("approved_by_id")
+  rejectedAt          DateTime?   @map("rejected_at")
+  rejectionReason     String?     @map("rejection_reason")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
 
   // Relations
   subscription      Subscription?
@@ -260,6 +271,8 @@ model User {
   writingDocuments  WritingDocument[]
   seoContentBriefs  SeoContentBrief[]
   backlinkAuditJobs BacklinkAuditJob[]
+  gbpLocations      GbpLocation[]
+  gbpPosts          GbpPost[]
 
   @@map("users")
 }
@@ -1049,4 +1062,190 @@ model SeoBriefCache {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("seo_brief_cache")
+}
+
+// ============================================
+// GBP OPTIMIZATION (Google Business Profile)
+// ============================================
+
+enum GbpPostType {
+  UPDATE
+  OFFER
+  EVENT
+  PRODUCT
+}
+
+enum GbpPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+enum GbpMetricType {
+  PROFILE_VIEWS_MAPS
+  PROFILE_VIEWS_SEARCH
+  WEBSITE_CLICKS
+  DIRECTION_REQUESTS
+  CALL_CLICKS
+  BOOKING_CLICKS
+  PHOTO_VIEWS
+  SEARCH_KEYWORDS
+}
+
+model GbpLocation {
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  googleLocationId  String   @map("google_location_id")
+  googleAccountId   String?  @map("google_account_id")
+
+  // Core NAP
+  name              String
+  storeCode         String?  @map("store_code")
+  phone             String?
+  websiteUrl        String?  @map("website_url")
+
+  // Address
+  addressLine1      String?  @map("address_line1")
+  addressLine2      String?  @map("address_line2")
+  city              String?
+  region            String?
+  postalCode        String?  @map("postal_code")
+  countryCode       String?  @map("country_code")
+  latitude          Float?
+  longitude         Float?
+
+  // Profile data
+  primaryCategory   String?  @map("primary_category")
+  additionalCategories Json? @map("additional_categories") // string[]
+  description       String?
+  hours             Json?    // { monday: [{open, close}], ... }
+  specialHours      Json?    @map("special_hours")
+  attributes        Json?    // { wheelchairAccessible: true, ... }
+  photos            Json?    // [{url, type}]
+
+  // Health
+  verificationState String?  @map("verification_state") // VERIFIED | PENDING | UNVERIFIED
+  completenessScore Int      @default(0) @map("completeness_score") // 0-100
+  lastSyncedAt      DateTime? @map("last_synced_at")
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  insights GbpInsightSnapshot[]
+  reviews  GbpReview[]
+  posts    GbpPost[]
+  edits    GbpEditSuggestion[]
+
+  @@unique([userId, googleLocationId])
+  @@index([userId])
+  @@map("gbp_locations")
+}
+
+model GbpInsightSnapshot {
+  id          String        @id @default(cuid())
+  locationId  String        @map("location_id")
+  metricType  GbpMetricType @map("metric_type")
+  value       Int           @default(0)
+  periodStart DateTime      @map("period_start")
+  periodEnd   DateTime      @map("period_end")
+  breakdown   Json?         // daily series or keyword breakdown
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, metricType, periodStart, periodEnd])
+  @@index([locationId, metricType])
+  @@map("gbp_insight_snapshots")
+}
+
+model GbpReview {
+  id             String   @id @default(cuid())
+  locationId     String   @map("location_id")
+  googleReviewId String   @map("google_review_id")
+
+  reviewerName   String?  @map("reviewer_name")
+  reviewerPhoto  String?  @map("reviewer_photo")
+  rating         Int      // 1-5
+  comment        String?
+  language       String?
+
+  replyText      String?  @map("reply_text")
+  repliedAt      DateTime? @map("replied_at")
+  repliedBy      String?  @map("replied_by") // "user" | "ai"
+
+  sentiment      String?  // positive | neutral | negative
+  createdAt      DateTime @map("created_at") // original review date from Google
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, googleReviewId])
+  @@index([locationId, createdAt(sort: Desc)])
+  @@map("gbp_reviews")
+}
+
+model GbpPost {
+  id            String        @id @default(cuid())
+  userId        String        @map("user_id")
+  locationId    String        @map("location_id")
+
+  type          GbpPostType   @default(UPDATE)
+  status        GbpPostStatus @default(DRAFT)
+
+  content       String
+  mediaUrl      String?       @map("media_url")
+  ctaType       String?       @map("cta_type") // LEARN_MORE | BOOK | ORDER | SHOP | CALL | SIGN_UP
+  ctaUrl        String?       @map("cta_url")
+
+  // Offer / Event extras
+  couponCode    String?       @map("coupon_code")
+  offerTerms    String?       @map("offer_terms")
+  eventTitle    String?       @map("event_title")
+  eventStart    DateTime?     @map("event_start")
+  eventEnd      DateTime?     @map("event_end")
+
+  scheduledAt   DateTime?     @map("scheduled_at")
+  publishedAt   DateTime?     @map("published_at")
+  googlePostId  String?       @map("google_post_id")
+  failureReason String?       @map("failure_reason")
+
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([locationId, scheduledAt])
+  @@index([status, scheduledAt])
+  @@map("gbp_posts")
+}
+
+model GbpEditSuggestion {
+  id           String   @id @default(cuid())
+  locationId   String   @map("location_id")
+  field        String   // e.g. "phone", "hours", "description"
+  currentValue Json?    @map("current_value")
+  suggestedValue Json?  @map("suggested_value")
+  source       String?  // "google_user" | "owner_system"
+  status       String   @default("pending") // pending | approved | rejected
+  detectedAt   DateTime @default(now()) @map("detected_at")
+  resolvedAt   DateTime? @map("resolved_at")
+
+  location GbpLocation @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, status])
+  @@map("gbp_edit_suggestions")
+}
+
+model GbpInsightCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique @map("cache_key")
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("gbp_insight_cache")
 }

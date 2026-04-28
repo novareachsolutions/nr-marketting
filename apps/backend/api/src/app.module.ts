@@ -29,6 +29,8 @@ import { ReportsModule } from './reports/reports.module';
 import { TopicResearchModule } from './topic-research/topic-research.module';
 import { WritingAssistantModule } from './writing-assistant/writing-assistant.module';
 import { SeoContentTemplateModule } from './seo-content-template/seo-content-template.module';
+import { GbpOptimizationModule } from './gbp-optimization/gbp-optimization.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { SeoContentTemplateModule } from './seo-content-template/seo-content-tem
     TopicResearchModule,
     WritingAssistantModule,
     SeoContentTemplateModule,
+    GbpOptimizationModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

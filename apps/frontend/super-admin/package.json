@@ -8,13 +8,15 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf .next"
+    "clean": "rm -rf .next",
+    "seed:super-admin": "pnpm --filter @repo/database db:seed"
   },
   "dependencies": {
     "next": "14.0.4",
     "react": "^18",
     "react-dom": "^18",
     "@tanstack/react-query": "^5.17.0",
+    "@repo/database": "workspace:*",
     "@repo/shared-frontend": "workspace:*",
     "@repo/shared-common": "workspace:*"
   },

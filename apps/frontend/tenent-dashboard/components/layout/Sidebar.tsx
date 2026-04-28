@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useAuth } from '@/context/AuthContext';
+import { useProjects, useProject } from '@/hooks/useProjects';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import {
   LayoutDashboard,
@@ -26,6 +27,8 @@ import {
   Lightbulb,
   PenTool,
   ClipboardType,
+  MapPin,
+  FolderKanban,
 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -44,6 +47,16 @@ interface SidebarProps {
 export function Sidebar({ projectId }: SidebarProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: currentProject } = useProject(projectId || '');
+
+  const hasProjects = (projects?.length ?? 0) > 0;
+
+  // Hide the sidebar entirely until the user has at least one project.
+  // Project pages bypass this since reaching them implies a project exists.
+  if (!projectId && !projectsLoading && !hasProjects) {
+    return null;
+  }
 
   const initials =
     user?.name
@@ -73,6 +86,7 @@ export function Sidebar({ projectId }: SidebarProps) {
     { href: '/dashboard/topic-research', icon: <Lightbulb size={18} />, label: 'Topic Research', match: '/dashboard/topic-research' },
     { href: '/dashboard/content-template', icon: <ClipboardType size={18} />, label: 'SEO Content Template', match: '/dashboard/content-template' },
     { href: '/dashboard/writing-assistant', icon: <PenTool size={18} />, label: 'Writing Assistant', match: '/dashboard/writing-assistant' },
+    { href: '/dashboard/gbp-optimization', icon: <MapPin size={18} />, label: 'GBP Optimization', match: '/dashboard/gbp-optimization' },
   ];
 
   const mainLinks: SidebarLink[] = [
@@ -141,6 +155,24 @@ export function Sidebar({ projectId }: SidebarProps) {
           <small>Analytics Hub</small>
         </span>
       </Link>
+
+      {/* Current project indicator */}
+      {projectId && currentProject && (
+        <Link
+          href={`/dashboard/projects/${projectId}`}
+          className="sidebar-current-project"
+          title={`${currentProject.name} (${currentProject.domain})`}
+        >
+          <div className="sidebar-current-project-icon">
+            <FolderKanban size={16} />
+          </div>
+          <div className="sidebar-current-project-meta">
+            <div className="sidebar-current-project-label">Current Project</div>
+            <div className="sidebar-current-project-name">{currentProject.name}</div>
+            <div className="sidebar-current-project-domain">{currentProject.domain}</div>
+          </div>
+        </Link>
+      )}
 
       {/* Scrollable nav area */}
       <div className="sidebar-nav-scroll">

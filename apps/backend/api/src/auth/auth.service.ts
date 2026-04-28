@@ -37,7 +37,6 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, this.BCRYPT_ROUNDS);
-    const emailVerifyToken = randomBytes(32).toString('hex');
 
     // Create Stripe customer (falls back to temp ID if Stripe not configured)
     let stripeCustomerId: string;
@@ -55,7 +54,6 @@ export class AuthService {
         email: dto.email.toLowerCase().trim(),
         passwordHash,
         name: dto.name ?? null,
-        emailVerifyToken,
         subscription: {
           create: {
             stripeCustomerId,
@@ -85,11 +83,11 @@ export class AuthService {
       })),
     });
 
-    // TODO: Send verification email via email service
-    // await this.emailService.sendVerificationEmail(user.email, emailVerifyToken);
-
+    // Account starts in PENDING approval state.
+    // A super admin must approve the account before the user can sign in.
     return {
-      message: 'Registration successful. Check your email to verify your account.',
+      message:
+        'Registration submitted. Your account is pending approval by an administrator. You will be able to sign in once approved.',
     };
   }
 
@@ -110,9 +108,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    if (!user.isEmailVerified) {
+    if (user.approvalStatus === 'REJECTED') {
       throw new ForbiddenException(
-        'Email not verified. Please check your inbox or request a new verification email.',
+        'Your account has been rejected. Please contact support for more information.',
+      );
+    }
+
+    if (user.approvalStatus !== 'APPROVED') {
+      throw new ForbiddenException(
+        'Your account is pending approval by an administrator. You will be notified once approved.',
       );
     }
 
@@ -152,6 +156,7 @@ export class AuthService {
         role: user.role,
         plan: user.subscription?.plan ?? 'FREE',
         isEmailVerified: user.isEmailVerified,
+        approvalStatus: user.approvalStatus,
       },
     };
   }
@@ -364,6 +369,7 @@ export class AuthService {
       role: user.role,
       plan: user.subscription?.plan ?? 'FREE',
       isEmailVerified: user.isEmailVerified,
+      approvalStatus: user.approvalStatus,
       timezone: user.timezone,
       avatarUrl: user.avatarUrl,
       createdAt: user.createdAt,

@@ -28,13 +28,15 @@ function DashboardContent() {
     }
   };
 
+  const hasProjects = !!projects && projects.length > 0;
+
   return (
     <>
       <Head>
         <title>Dashboard — NR SEO Platform</title>
       </Head>
-      <Sidebar />
-      <div className={sidebarStyles.contentWithSidebar}>
+      {hasProjects && <Sidebar />}
+      <div className={hasProjects ? sidebarStyles.contentWithSidebar : ''}>
         <main className={styles.main}>
           <div className={styles.pageHeader}>
             <div>

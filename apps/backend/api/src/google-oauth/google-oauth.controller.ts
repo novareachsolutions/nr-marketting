@@ -31,7 +31,11 @@ export class GoogleOAuthController {
    * passes the token as a query parameter which we verify manually.
    */
   @Get('authorize')
-  authorize(@Query('token') token: string, @Res() res: Response) {
+  authorize(
+    @Query('token') token: string,
+    @Query('gbp') gbp: string,
+    @Res() res: Response,
+  ) {
     const frontendUrl =
       this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
 
@@ -45,7 +49,11 @@ export class GoogleOAuthController {
       const payload = this.jwtService.verify(token);
       const userId = payload.sub;
 
-      const url = this.googleOAuthService.getAuthorizationUrl(userId);
+      const includeGbp = gbp === '1' || gbp === 'true';
+      const url = this.googleOAuthService.getAuthorizationUrl(
+        userId,
+        includeGbp,
+      );
       return res.redirect(url);
     } catch {
       return res.redirect(

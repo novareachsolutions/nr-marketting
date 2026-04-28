@@ -28,11 +28,14 @@ export class GoogleOAuthService {
     );
   }
 
-  getAuthorizationUrl(userId: string): string {
+  getAuthorizationUrl(userId: string, includeGbp = false): string {
     const scopes = [
       'https://www.googleapis.com/auth/webmasters.readonly',
       'https://www.googleapis.com/auth/analytics.readonly',
     ];
+    if (includeGbp) {
+      scopes.push('https://www.googleapis.com/auth/business.manage');
+    }
 
     const params = new URLSearchParams({
       client_id: this.clientId,

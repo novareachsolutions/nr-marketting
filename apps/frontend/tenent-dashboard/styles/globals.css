@@ -82,6 +82,67 @@
   letter-spacing: 0;
 }
 
+.app-sidebar .sidebar-current-project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  background: var(--sidebar-active-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+
+.app-sidebar .sidebar-current-project:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.app-sidebar .sidebar-current-project-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.app-sidebar .sidebar-current-project-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-sidebar .sidebar-current-project-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+.app-sidebar .sidebar-current-project-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar .sidebar-current-project-domain {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .app-sidebar .sidebar-nav {
   padding: 0 12px;
   margin-bottom: 4px;
