@@ -3,11 +3,11 @@
 # All actions send email notifications via SendGrid on success/failure.
 
 # ============================================================
-# Action: Build Docker images for production (develop branch)
+# Action: Build Docker images for production (main branch)
 # ============================================================
 [[action]]
 name = "nr-marketing-build-images"
-description = "Build 4 Docker images from develop branch for production deployment"
+description = "Build 4 Docker images from main branch for production deployment"
 tags = ["nr-marketing", "ci", "build"]
 [action.config]
 failure_alert = true
@@ -15,7 +15,7 @@ file_contents = """
 const SERVER = "[[NR_MARKETING_SERVER_ID]]";
 const PREFIX = "[[NR_MARKETING_TERMINAL_PREFIX]]";
 const REPO = "[[NR_MARKETING_REPO_DIR]]";
-const BRANCH = "[[NR_MARKETING_DEVELOP_BRANCH]]";
+const BRANCH = "[[NR_MARKETING_PRODUCTION_BRANCH]]";
 const IMAGE_PREFIX = "[[NR_MARKETING_IMAGE_PREFIX]]";
 const DEPLOY_DIR = "[[NR_MARKETING_DEPLOY_DIR]]";
 
@@ -264,11 +264,11 @@ try {
 """
 
 # ============================================================
-# Action: Build Docker images for staging (staging-develop branch)
+# Action: Build Docker images for staging (develop branch)
 # ============================================================
 [[action]]
 name = "nr-marketing-build-staging-images"
-description = "Build 4 Docker images from staging-develop branch for staging deployment"
+description = "Build 4 Docker images from develop branch for staging deployment"
 tags = ["nr-marketing", "ci", "build", "staging"]
 [action.config]
 failure_alert = true

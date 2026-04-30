@@ -12,14 +12,14 @@ description = "Absolute path to the NR Marketing repository on the VPS"
 value = "/home/aahaddev/nr-marketting"
 
 [[variable]]
-name = "NR_MARKETING_DEVELOP_BRANCH"
+name = "NR_MARKETING_PRODUCTION_BRANCH"
 description = "Branch deployed to production VPS"
-value = "develop"
+value = "main"
 
 [[variable]]
 name = "NR_MARKETING_STAGING_BRANCH"
 description = "Branch deployed to staging VPS"
-value = "staging-develop"
+value = "develop"
 
 [[variable]]
 name = "NR_MARKETING_MAIN_BRANCH"

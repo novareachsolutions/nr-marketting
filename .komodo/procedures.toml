@@ -2,11 +2,11 @@
 # Each procedure chains build + deploy actions triggered by GitHub webhooks.
 
 # ============================================================
-# Procedure: develop → production VPS deployment
+# Procedure: main → production VPS deployment
 # ============================================================
 [[procedure]]
-name = "nr-marketing-develop-deploy"
-description = "Build images from develop and deploy to production VPS"
+name = "nr-marketing-production-deploy"
+description = "Build images from main and deploy to production VPS"
 tags = ["nr-marketing", "ci", "production"]
 [procedure.config]
 webhook_enabled = true
@@ -24,11 +24,11 @@ executions = [
 ]
 
 # ============================================================
-# Procedure: staging-develop → staging VPS deployment
+# Procedure: develop → staging VPS deployment
 # ============================================================
 [[procedure]]
 name = "nr-marketing-staging-deploy"
-description = "Build images from staging-develop and deploy to staging VPS"
+description = "Build images from develop and deploy to staging VPS"
 tags = ["nr-marketing", "ci", "staging"]
 [procedure.config]
 webhook_enabled = true
