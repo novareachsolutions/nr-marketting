@@ -1,0 +1,10 @@
+# Komodo server resource for the VPS running NR Marketing services.
+# Reusing the same server as NRPOS since they run on the same VPS.
+[[server]]
+name = "server-nrpos"
+description = "Primary VPS that hosts NRPOS, NR Marketing and Komodo periphery"
+tags = ["nrpos", "nr-marketing", "vps"]
+[server.config]
+address = "http://periphery:8120"
+region = "primary"
+enabled = true

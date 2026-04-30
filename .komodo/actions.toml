@@ -1,0 +1,527 @@
+# Komodo actions for NR Marketing CI/CD pipeline.
+# Build Docker images locally on VPS, then deploy via docker compose.
+# All actions send email notifications via SendGrid on success/failure.
+
+# ============================================================
+# Action: Build Docker images for production (develop branch)
+# ============================================================
+[[action]]
+name = "nr-marketing-build-images"
+description = "Build 4 Docker images from develop branch for production deployment"
+tags = ["nr-marketing", "ci", "build"]
+[action.config]
+failure_alert = true
+file_contents = """
+const SERVER = "[[NR_MARKETING_SERVER_ID]]";
+const PREFIX = "[[NR_MARKETING_TERMINAL_PREFIX]]";
+const REPO = "[[NR_MARKETING_REPO_DIR]]";
+const BRANCH = "[[NR_MARKETING_DEVELOP_BRANCH]]";
+const IMAGE_PREFIX = "[[NR_MARKETING_IMAGE_PREFIX]]";
+const DEPLOY_DIR = "[[NR_MARKETING_DEPLOY_DIR]]";
+
+const TARGETS = [
+  { name: "api", target: "api-production" },
+  { name: "tenent-dashboard", target: "tenent-dashboard-production" },
+  { name: "super-admin", target: "super-admin-production" },
+  { name: "customer-website", target: "customer-website-production" },
+];
+
+const NOTIFICATION_FROM = "novareachsolutions1@gmail.com";
+const NOTIFICATION_TO = [
+  "abdulaziz2537@gmail.com",
+  "abdulxhad@gmail.com",
+  "mrqureshi271@gmail.com",
+  "shariq.saleemx@gmail.com",
+  "dev@novareachsolutions.com",
+  "ayanrazvi08@gmail.com",
+];
+
+const slugify = (label: string) =>
+  label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const createdTerminals = new Set<string>();
+
+const ensureTerminal = async (name: string) => {
+  if (createdTerminals.has(name)) return;
+  try {
+    await komodo.write("CreateTerminal", { server: SERVER, name });
+  } catch (_e) {
+    // Terminal may already exist, ignore
+  }
+  createdTerminals.add(name);
+};
+
+const run = async (label: string, command: string, silent = false): Promise<string> => {
+  const terminal = `${PREFIX}-${slugify(label)}`;
+  if (!silent) {
+    console.log(`\\n[BUILD] ${label}`);
+    console.log(`[BUILD] $ ${command}`);
+  }
+
+  await ensureTerminal(terminal);
+
+  let output = "";
+  let exitCode = "0";
+  await komodo.execute_terminal(
+    { server: SERVER, terminal, command },
+    {
+      onLine: (line) => { output += line + "\\n"; if (!silent) console.log(line); },
+      onFinish: (code) => { exitCode = code.trim(); },
+    },
+  );
+
+  if (Number(exitCode) !== 0) {
+    throw new Error(`${label} failed (exit ${exitCode})`);
+  }
+  return output;
+};
+
+const sendEmail = async (subject: string, html: string) => {
+  try {
+    const keyOutput = await run("get-sendgrid-key", `grep '^SENDGRID_API_KEY=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+    const apiKey = keyOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim();
+    if (!apiKey) { console.log("[EMAIL] No SendGrid key found, skipping"); return; }
+
+    const payload = {
+      personalizations: [{ to: NOTIFICATION_TO.map(email => ({ email })) }],
+      from: { email: NOTIFICATION_FROM, name: "NR Marketing CI/CD" },
+      subject,
+      content: [{ type: "text/html", value: html }],
+    };
+
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    console.log(`[EMAIL] Notification sent (${res.status})`);
+  } catch (e) {
+    console.log(`[EMAIL] Failed to send: ${e instanceof Error ? e.message : JSON.stringify(e)}`);
+  }
+};
+
+try {
+  // Step 1: Pull latest code
+  await run("git-pull", `cd ${REPO} && git fetch origin --prune && git checkout ${BRANCH} && git reset --hard origin/${BRANCH}`);
+
+  // Step 2: Get commit SHA
+  const shaOutput = await run("get-sha", `cd ${REPO} && git rev-parse --short HEAD`);
+  const SHA = shaOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()!.trim();
+  console.log(`\\n[BUILD] Commit SHA: ${SHA}`);
+
+  // Step 2.5: Read DATABASE_URL from .env
+  const dbOutput = await run("get-database-url", `grep '^DATABASE_URL=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+  const DATABASE_URL = dbOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim() || "";
+  const dbArg = DATABASE_URL ? `--build-arg DATABASE_URL=${DATABASE_URL}` : "";
+  if (!DATABASE_URL) console.log("[WARN] DATABASE_URL not found in .env");
+
+  // Step 2.6: Read NEXT_PUBLIC_API_URL from .env
+  const apiUrlOutput = await run("get-api-url", `grep '^NEXT_PUBLIC_API_URL=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+  const NEXT_PUBLIC_API_URL = apiUrlOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim() || "";
+  const apiUrlArg = NEXT_PUBLIC_API_URL ? `--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}` : "";
+  if (!NEXT_PUBLIC_API_URL) console.log("[WARN] NEXT_PUBLIC_API_URL not found in .env");
+
+  // Step 3: Build each image
+  for (const { name, target } of TARGETS) {
+    const tag = `${IMAGE_PREFIX}/${name}:${SHA}`;
+    await run(`build-${name}`, `cd ${REPO} && docker build -f Dockerfile --target ${target} ${dbArg} ${apiUrlArg} -t ${tag} .`);
+  }
+
+  // Step 4: Write SHA for deploy action
+  await run("write-sha", `echo "${SHA}" > /tmp/nr-marketing-build-sha`);
+  console.log(`\\n[BUILD] All images built successfully with tag: ${SHA}`);
+
+} catch (error) {
+  const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  await sendEmail(
+    "[NR Marketing] Production Build FAILED",
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#dc2626">Production Build Failed</h2><p><strong>Branch:</strong> ${BRANCH}</p><p><strong>Error:</strong> ${errMsg}</p><p><strong>Pipeline:</strong> nr-marketing-build-images</p><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+  throw error;
+}
+"""
+
+# ============================================================
+# Action: Deploy production (docker compose up with new images)
+# ============================================================
+[[action]]
+name = "nr-marketing-deploy-production"
+description = "Deploy production stack using locally built images"
+tags = ["nr-marketing", "ci", "deploy"]
+[action.config]
+failure_alert = true
+file_contents = """
+const SERVER = "[[NR_MARKETING_SERVER_ID]]";
+const PREFIX = "[[NR_MARKETING_TERMINAL_PREFIX]]";
+const DEPLOY_DIR = "[[NR_MARKETING_DEPLOY_DIR]]";
+const COMPOSE_FILE = "[[NR_MARKETING_DEPLOY_COMPOSE]]";
+const GITHUB_REPO = "[[NR_MARKETING_GITHUB_REPOSITORY]]";
+
+const NOTIFICATION_FROM = "novareachsolutions1@gmail.com";
+const NOTIFICATION_TO = [
+  "abdulaziz2537@gmail.com",
+  "abdulxhad@gmail.com",
+  "mrqureshi271@gmail.com",
+  "shariq.saleemx@gmail.com",
+  "dev@novareachsolutions.com",
+  "ayanrazvi08@gmail.com",
+];
+
+const slugify = (label: string) =>
+  label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const createdTerminals = new Set<string>();
+
+const ensureTerminal = async (name: string) => {
+  if (createdTerminals.has(name)) return;
+  try {
+    await komodo.write("CreateTerminal", { server: SERVER, name });
+  } catch (_e) {
+    // Terminal may already exist, ignore
+  }
+  createdTerminals.add(name);
+};
+
+const run = async (label: string, command: string, silent = false): Promise<string> => {
+  const terminal = `${PREFIX}-${slugify(label)}`;
+  if (!silent) {
+    console.log(`\\n[DEPLOY] ${label}`);
+    console.log(`[DEPLOY] $ ${command}`);
+  }
+
+  await ensureTerminal(terminal);
+
+  let output = "";
+  let exitCode = "0";
+  await komodo.execute_terminal(
+    { server: SERVER, terminal, command },
+    {
+      onLine: (line) => { output += line + "\\n"; if (!silent) console.log(line); },
+      onFinish: (code) => { exitCode = code.trim(); },
+    },
+  );
+
+  if (Number(exitCode) !== 0) {
+    throw new Error(`${label} failed (exit ${exitCode})`);
+  }
+  return output;
+};
+
+const sendEmail = async (subject: string, html: string) => {
+  try {
+    const keyOutput = await run("get-sendgrid-key", `grep '^SENDGRID_API_KEY=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+    const apiKey = keyOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim();
+    if (!apiKey) { console.log("[EMAIL] No SendGrid key found, skipping"); return; }
+
+    const payload = {
+      personalizations: [{ to: NOTIFICATION_TO.map(email => ({ email })) }],
+      from: { email: NOTIFICATION_FROM, name: "NR Marketing CI/CD" },
+      subject,
+      content: [{ type: "text/html", value: html }],
+    };
+
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    console.log(`[EMAIL] Notification sent (${res.status})`);
+  } catch (e) {
+    console.log(`[EMAIL] Failed to send: ${e instanceof Error ? e.message : JSON.stringify(e)}`);
+  }
+};
+
+let SHA = "unknown";
+
+try {
+  // Step 1: Read SHA from build action
+  const shaOutput = await run("read-sha", "cat /tmp/nr-marketing-build-sha");
+  SHA = shaOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()!.trim();
+  console.log(`\\n[DEPLOY] Deploying with RELEASE_TAG=${SHA}`);
+
+  // Step 2: Deploy with docker compose
+  await run("compose-up", `cd ${DEPLOY_DIR} && RELEASE_TAG=${SHA} GITHUB_REPOSITORY=${GITHUB_REPO} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans`);
+
+  // Step 3: Show container status
+  const status = await run("health-check", `docker ps --filter "label=com.docker.compose.project=app-deploy" --format "table {{.Names}}\\t{{.Image}}\\t{{.Status}}"`);
+
+  console.log(`\\n[DEPLOY] Production deployed successfully with tag: ${SHA}`);
+
+  // Step 4: Send success email
+  await sendEmail(
+    `[NR Marketing] Production Deploy Successful - ${SHA}`,
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#16a34a">Production Deploy Successful</h2><p><strong>Branch:</strong> develop</p><p><strong>Commit:</strong> ${SHA}</p><p><strong>Services:</strong> api, tenent-dashboard, super-admin, customer-website</p><p><strong>Compose:</strong> ${COMPOSE_FILE}</p><hr><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+
+} catch (error) {
+  const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  await sendEmail(
+    `[NR Marketing] Production Deploy FAILED - ${SHA}`,
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#dc2626">Production Deploy Failed</h2><p><strong>Branch:</strong> develop</p><p><strong>Commit:</strong> ${SHA}</p><p><strong>Error:</strong> ${errMsg}</p><p><strong>Pipeline:</strong> nr-marketing-deploy-production</p><hr><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+  throw error;
+}
+"""
+
+# ============================================================
+# Action: Build Docker images for staging (staging-develop branch)
+# ============================================================
+[[action]]
+name = "nr-marketing-build-staging-images"
+description = "Build 4 Docker images from staging-develop branch for staging deployment"
+tags = ["nr-marketing", "ci", "build", "staging"]
+[action.config]
+failure_alert = true
+file_contents = """
+const SERVER = "[[NR_MARKETING_SERVER_ID]]";
+const PREFIX = "[[NR_MARKETING_TERMINAL_PREFIX]]";
+const REPO = "[[NR_MARKETING_REPO_DIR]]";
+const BRANCH = "[[NR_MARKETING_STAGING_BRANCH]]";
+const IMAGE_PREFIX = "[[NR_MARKETING_IMAGE_PREFIX]]";
+const DEPLOY_DIR = "[[NR_MARKETING_DEPLOY_DIR]]";
+
+const TARGETS = [
+  { name: "api", target: "api-production" },
+  { name: "tenent-dashboard", target: "tenent-dashboard-production" },
+  { name: "super-admin", target: "super-admin-production" },
+  { name: "customer-website", target: "customer-website-production" },
+];
+
+const NOTIFICATION_FROM = "novareachsolutions1@gmail.com";
+const NOTIFICATION_TO = [
+  "abdulaziz2537@gmail.com",
+  "abdulxhad@gmail.com",
+  "mrqureshi271@gmail.com",
+  "shariq.saleemx@gmail.com",
+  "dev@novareachsolutions.com",
+  "ayanrazvi08@gmail.com",
+];
+
+const slugify = (label: string) =>
+  label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const createdTerminals = new Set<string>();
+
+const ensureTerminal = async (name: string) => {
+  if (createdTerminals.has(name)) return;
+  try {
+    await komodo.write("CreateTerminal", { server: SERVER, name });
+  } catch (_e) {
+    // Terminal may already exist, ignore
+  }
+  createdTerminals.add(name);
+};
+
+const run = async (label: string, command: string, silent = false): Promise<string> => {
+  const terminal = `${PREFIX}-${slugify(label)}`;
+  if (!silent) {
+    console.log(`\\n[STAGING-BUILD] ${label}`);
+    console.log(`[STAGING-BUILD] $ ${command}`);
+  }
+
+  await ensureTerminal(terminal);
+
+  let output = "";
+  let exitCode = "0";
+  await komodo.execute_terminal(
+    { server: SERVER, terminal, command },
+    {
+      onLine: (line) => { output += line + "\\n"; if (!silent) console.log(line); },
+      onFinish: (code) => { exitCode = code.trim(); },
+    },
+  );
+
+  if (Number(exitCode) !== 0) {
+    throw new Error(`${label} failed (exit ${exitCode})`);
+  }
+  return output;
+};
+
+const sendEmail = async (subject: string, html: string) => {
+  try {
+    const keyOutput = await run("get-sendgrid-key", `grep '^SENDGRID_API_KEY=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+    const apiKey = keyOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim();
+    if (!apiKey) { console.log("[EMAIL] No SendGrid key found, skipping"); return; }
+
+    const payload = {
+      personalizations: [{ to: NOTIFICATION_TO.map(email => ({ email })) }],
+      from: { email: NOTIFICATION_FROM, name: "NR Marketing CI/CD" },
+      subject,
+      content: [{ type: "text/html", value: html }],
+    };
+
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    console.log(`[EMAIL] Notification sent (${res.status})`);
+  } catch (e) {
+    console.log(`[EMAIL] Failed to send: ${e instanceof Error ? e.message : JSON.stringify(e)}`);
+  }
+};
+
+try {
+  // Step 1: Pull latest staging code
+  await run("git-pull", `cd ${REPO} && git fetch origin --prune && git checkout ${BRANCH} && git reset --hard origin/${BRANCH}`);
+
+  // Step 2: Get commit SHA
+  const shaOutput = await run("get-sha", `cd ${REPO} && git rev-parse --short HEAD`);
+  const SHA = shaOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()!.trim();
+  const TAG = `staging-${SHA}`;
+  console.log(`\\n[STAGING-BUILD] Commit SHA: ${SHA}, Tag: ${TAG}`);
+
+  // Step 2.5: Read DATABASE_URL from .env
+  const dbOutput = await run("get-database-url", `grep '^DATABASE_URL=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+  const DATABASE_URL = dbOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim() || "";
+  const dbArg = DATABASE_URL ? `--build-arg DATABASE_URL=${DATABASE_URL}` : "";
+  if (!DATABASE_URL) console.log("[WARN] DATABASE_URL not found in .env");
+
+  // Step 2.6: Read NEXT_PUBLIC_API_URL from .env
+  const apiUrlOutput = await run("get-api-url", `grep '^NEXT_PUBLIC_API_URL=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+  const NEXT_PUBLIC_API_URL = apiUrlOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim() || "";
+  const apiUrlArg = NEXT_PUBLIC_API_URL ? `--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}` : "";
+  if (!NEXT_PUBLIC_API_URL) console.log("[WARN] NEXT_PUBLIC_API_URL not found in .env");
+
+  // Step 3: Build each image with staging- prefix tag
+  for (const { name, target } of TARGETS) {
+    const imageTag = `${IMAGE_PREFIX}/${name}:${TAG}`;
+    await run(`build-${name}`, `cd ${REPO} && docker build -f Dockerfile --target ${target} ${dbArg} ${apiUrlArg} -t ${imageTag} .`);
+  }
+
+  // Step 4: Write tag for deploy action
+  await run("write-sha", `echo "${TAG}" > /tmp/nr-marketing-staging-build-sha`);
+  console.log(`\\n[STAGING-BUILD] All staging images built with tag: ${TAG}`);
+
+} catch (error) {
+  const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  await sendEmail(
+    "[NR Marketing] Staging Build FAILED",
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#dc2626">Staging Build Failed</h2><p><strong>Branch:</strong> ${BRANCH}</p><p><strong>Error:</strong> ${errMsg}</p><p><strong>Pipeline:</strong> nr-marketing-build-staging-images</p><hr><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+  throw error;
+}
+"""
+
+# ============================================================
+# Action: Deploy staging (docker compose up with staging images)
+# ============================================================
+[[action]]
+name = "nr-marketing-deploy-staging"
+description = "Deploy staging stack using locally built staging images"
+tags = ["nr-marketing", "ci", "deploy", "staging"]
+[action.config]
+failure_alert = true
+file_contents = """
+const SERVER = "[[NR_MARKETING_SERVER_ID]]";
+const PREFIX = "[[NR_MARKETING_TERMINAL_PREFIX]]";
+const STAGING_DIR = "[[NR_MARKETING_STAGING_DIR]]";
+const COMPOSE_FILE = "[[NR_MARKETING_DEPLOY_COMPOSE]]";
+const DEPLOY_DIR = "[[NR_MARKETING_DEPLOY_DIR]]";
+const GITHUB_REPO = "[[NR_MARKETING_GITHUB_REPOSITORY]]";
+
+const NOTIFICATION_FROM = "novareachsolutions1@gmail.com";
+const NOTIFICATION_TO = [
+  "abdulaziz2537@gmail.com",
+  "abdulxhad@gmail.com",
+  "mrqureshi271@gmail.com",
+  "shariq.saleemx@gmail.com",
+  "dev@novareachsolutions.com",
+  "ayanrazvi08@gmail.com",
+];
+
+const slugify = (label: string) =>
+  label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+
+const createdTerminals = new Set<string>();
+
+const ensureTerminal = async (name: string) => {
+  if (createdTerminals.has(name)) return;
+  try {
+    await komodo.write("CreateTerminal", { server: SERVER, name });
+  } catch (_e) {
+    // Terminal may already exist, ignore
+  }
+  createdTerminals.add(name);
+};
+
+const run = async (label: string, command: string, silent = false): Promise<string> => {
+  const terminal = `${PREFIX}-${slugify(label)}`;
+  if (!silent) {
+    console.log(`\\n[STAGING-DEPLOY] ${label}`);
+    console.log(`[STAGING-DEPLOY] $ ${command}`);
+  }
+
+  await ensureTerminal(terminal);
+
+  let output = "";
+  let exitCode = "0";
+  await komodo.execute_terminal(
+    { server: SERVER, terminal, command },
+    {
+      onLine: (line) => { output += line + "\\n"; if (!silent) console.log(line); },
+      onFinish: (code) => { exitCode = code.trim(); },
+    },
+  );
+
+  if (Number(exitCode) !== 0) {
+    throw new Error(`${label} failed (exit ${exitCode})`);
+  }
+  return output;
+};
+
+const sendEmail = async (subject: string, html: string) => {
+  try {
+    const keyOutput = await run("get-sendgrid-key", `grep '^SENDGRID_API_KEY=' ${DEPLOY_DIR}/.env | head -1 | cut -d= -f2`, true);
+    const apiKey = keyOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()?.trim();
+    if (!apiKey) { console.log("[EMAIL] No SendGrid key found, skipping"); return; }
+
+    const payload = {
+      personalizations: [{ to: NOTIFICATION_TO.map(email => ({ email })) }],
+      from: { email: NOTIFICATION_FROM, name: "NR Marketing CI/CD" },
+      subject,
+      content: [{ type: "text/html", value: html }],
+    };
+
+    const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    console.log(`[EMAIL] Notification sent (${res.status})`);
+  } catch (e) {
+    console.log(`[EMAIL] Failed to send: ${e instanceof Error ? e.message : JSON.stringify(e)}`);
+  }
+};
+
+let TAG = "unknown";
+
+try {
+  // Step 1: Read tag from build action
+  const tagOutput = await run("read-sha", "cat /tmp/nr-marketing-staging-build-sha");
+  TAG = tagOutput.trim().split("\\n").filter(l => l.trim().length > 0).pop()!.trim();
+  console.log(`\\n[STAGING-DEPLOY] Deploying with RELEASE_TAG=${TAG}`);
+
+  // Step 2: Deploy with docker compose
+  await run("compose-up", `cd ${STAGING_DIR} && RELEASE_TAG=${TAG} GITHUB_REPOSITORY=${GITHUB_REPO} docker compose -f ${COMPOSE_FILE} up -d --remove-orphans`);
+
+  // Step 3: Show container status
+  await run("health-check", `docker ps --filter "label=com.docker.compose.project=nr-marketing-staging" --format "table {{.Names}}\\t{{.Image}}\\t{{.Status}}"`);
+
+  console.log(`\\n[STAGING-DEPLOY] Staging deployed successfully with tag: ${TAG}`);
+
+  // Step 4: Send success email
+  await sendEmail(
+    `[NR Marketing] Staging Deploy Successful - ${TAG}`,
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#16a34a">Staging Deploy Successful</h2><p><strong>Branch:</strong> staging-develop</p><p><strong>Tag:</strong> ${TAG}</p><p><strong>Services:</strong> api, tenent-dashboard, super-admin, customer-website</p><p><strong>Compose:</strong> ${COMPOSE_FILE}</p><hr><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+
+} catch (error) {
+  const errMsg = error instanceof Error ? error.message : JSON.stringify(error);
+  await sendEmail(
+    `[NR Marketing] Staging Deploy FAILED - ${TAG}`,
+    `<div style="font-family:sans-serif;padding:20px"><h2 style="color:#dc2626">Staging Deploy Failed</h2><p><strong>Branch:</strong> staging-develop</p><p><strong>Tag:</strong> ${TAG}</p><p><strong>Error:</strong> ${errMsg}</p><p><strong>Pipeline:</strong> nr-marketing-deploy-staging</p><hr><p style="color:#666;font-size:12px">Sent by Komodo CI/CD</p></div>`
+  );
+  throw error;
+}
+"""

@@ -1,0 +1,46 @@
+# Komodo procedures for NR Marketing CI/CD pipeline.
+# Each procedure chains build + deploy actions triggered by GitHub webhooks.
+
+# ============================================================
+# Procedure: develop → production VPS deployment
+# ============================================================
+[[procedure]]
+name = "nr-marketing-develop-deploy"
+description = "Build images from develop and deploy to production VPS"
+tags = ["nr-marketing", "ci", "production"]
+[procedure.config]
+webhook_enabled = true
+
+[[procedure.config.stage]]
+name = "Build production images"
+executions = [
+  { execution.type = "RunAction", execution.params.action = "nr-marketing-build-images" },
+]
+
+[[procedure.config.stage]]
+name = "Deploy to production"
+executions = [
+  { execution.type = "RunAction", execution.params.action = "nr-marketing-deploy-production" },
+]
+
+# ============================================================
+# Procedure: staging-develop → staging VPS deployment
+# ============================================================
+[[procedure]]
+name = "nr-marketing-staging-deploy"
+description = "Build images from staging-develop and deploy to staging VPS"
+tags = ["nr-marketing", "ci", "staging"]
+[procedure.config]
+webhook_enabled = true
+
+[[procedure.config.stage]]
+name = "Build staging images"
+executions = [
+  { execution.type = "RunAction", execution.params.action = "nr-marketing-build-staging-images" },
+]
+
+[[procedure.config.stage]]
+name = "Deploy to staging"
+executions = [
+  { execution.type = "RunAction", execution.params.action = "nr-marketing-deploy-staging" },
+]

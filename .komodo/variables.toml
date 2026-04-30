@@ -1,0 +1,57 @@
+# Global variables referenced across Komodo resources.
+# Update these values to match your environment before syncing resources.
+
+[[variable]]
+name = "NR_MARKETING_SERVER_ID"
+description = "Komodo server id/name for the VPS hosting NR Marketing"
+value = "server-nrpos"
+
+[[variable]]
+name = "NR_MARKETING_REPO_DIR"
+description = "Absolute path to the NR Marketing repository on the VPS"
+value = "/home/aahaddev/nr-marketting"
+
+[[variable]]
+name = "NR_MARKETING_DEVELOP_BRANCH"
+description = "Branch deployed to production VPS"
+value = "develop"
+
+[[variable]]
+name = "NR_MARKETING_STAGING_BRANCH"
+description = "Branch deployed to staging VPS"
+value = "staging-develop"
+
+[[variable]]
+name = "NR_MARKETING_MAIN_BRANCH"
+description = "Release branch (used by resource sync)"
+value = "main"
+
+[[variable]]
+name = "NR_MARKETING_TERMINAL_PREFIX"
+description = "Terminal session prefix used for Komodo execute_terminal calls"
+value = "nr-marketing-ci"
+
+[[variable]]
+name = "NR_MARKETING_IMAGE_PREFIX"
+description = "Docker image name prefix"
+value = "ghcr.io/novareachsolutions/nr-marketting"
+
+[[variable]]
+name = "NR_MARKETING_DEPLOY_DIR"
+description = "Directory containing docker-compose.prod.yml and .env for production"
+value = "/home/aahaddev/nr-marketting"
+
+[[variable]]
+name = "NR_MARKETING_STAGING_DIR"
+description = "Directory containing docker-compose staging file for staging (if different)"
+value = "/home/azizdev/nr-marketting"
+
+[[variable]]
+name = "NR_MARKETING_DEPLOY_COMPOSE"
+description = "Production docker compose filename"
+value = "docker-compose.prod.yml"
+
+[[variable]]
+name = "NR_MARKETING_GITHUB_REPOSITORY"
+description = "GitHub repository path for image naming"
+value = "novareachsolutions/nr-marketting"
