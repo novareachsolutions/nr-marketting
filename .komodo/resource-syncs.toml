@@ -1,0 +1,16 @@
+# Resource sync definition so Komodo Core can manage all NR Marketing CI/CD resources from this repo.
+[[resource_sync]]
+name = "nr-marketing-ci-cd"
+description = "Sync NR Marketing CI/CD resources from the repository"
+[resource_sync.config]
+git_provider = "github.com"
+git_account = "novareachsolutions"
+repo = "novareachsolutions/nr-marketting"
+branch = "[[NR_MARKETING_MAIN_BRANCH]]"
+resource_path = [
+  ".komodo/variables.toml",
+  ".komodo/servers.toml",
+  ".komodo/stacks.toml",
+  ".komodo/actions.toml",
+  ".komodo/procedures.toml",
+]

@@ -1,0 +1,31 @@
+# Stack configurations for monitoring deployed services.
+# Deployment is handled by actions (not stacks) since RELEASE_TAG is dynamic.
+# These stacks allow Komodo to monitor container status.
+
+[[stack]]
+name = "nr-marketing-production-stack"
+description = "Monitor NR Marketing production services (deployment managed by nr-marketing-develop-deploy procedure)"
+tags = ["nr-marketing", "production"]
+[stack.config]
+server_id = "server-nrpos"
+project_name = "app-deploy"
+files_on_host = true
+run_directory = "/home/aahaddev/nr-marketting/"
+file_paths = ["docker-compose.prod.yml"]
+run_build = false
+auto_pull = false
+destroy_before_deploy = false
+
+[[stack]]
+name = "nr-marketing-staging-stack"
+description = "Monitor NR Marketing staging services (deployment managed by nr-marketing-staging-deploy procedure)"
+tags = ["nr-marketing", "staging"]
+[stack.config]
+server_id = "server-nrpos"
+project_name = "nr-marketing-staging"
+files_on_host = true
+run_directory = "/home/azizdev/nr-marketting/"
+file_paths = ["docker-compose.prod.yml"]
+run_build = false
+auto_pull = false
+destroy_before_deploy = false
