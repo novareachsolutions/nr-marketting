@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import axios, { AxiosInstance } from 'axios';
 import * as tls from 'tls';
@@ -37,8 +37,6 @@ interface SitemapAnalysis {
 
 @Injectable()
 export class SiteWideAuditService {
-  private readonly logger = new Logger(SiteWideAuditService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   /**
