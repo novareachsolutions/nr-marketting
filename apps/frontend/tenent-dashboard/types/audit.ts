@@ -223,3 +223,50 @@ export interface IssueTrends {
   crawls: { id: string; date: string; score: number | null }[];
   trends: Record<string, number[]>;
 }
+
+// Technical SEO Audit Checklist (128 items across 10 categories)
+export type ChecklistStatus = 'Error' | 'Warning' | 'Notice' | 'Pass' | 'Skipped';
+export type ChecklistSeverity = 'High' | 'Medium' | 'Low';
+
+export interface ChecklistItemResult {
+  id: number;
+  category: string;
+  title: string;
+  status: ChecklistStatus;
+  severity: ChecklistSeverity;
+  done: boolean;
+  affectedCount: number;
+  affectedUrls: string[];
+  message?: string;
+  suggestion?: string;
+}
+
+export interface ChecklistCategorySummary {
+  total: number;
+  passed: number;
+  errors: number;
+  warnings: number;
+  notices: number;
+  skipped: number;
+}
+
+export interface ChecklistCategoryReport {
+  id: number;
+  name: string;
+  items: ChecklistItemResult[];
+  summary: ChecklistCategorySummary;
+}
+
+export interface ChecklistReport {
+  crawlJobId: string;
+  generatedAt: string;
+  totals: {
+    items: number;
+    passed: number;
+    errors: number;
+    warnings: number;
+    notices: number;
+    skipped: number;
+  };
+  categories: ChecklistCategoryReport[];
+}

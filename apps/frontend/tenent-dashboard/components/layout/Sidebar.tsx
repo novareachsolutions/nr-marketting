@@ -37,7 +37,13 @@ interface SidebarLink {
   icon: ReactNode;
   label: string;
   match?: string;
+  exact?: boolean;
   badge?: number;
+}
+
+interface SidebarGroup {
+  label?: string;
+  links: SidebarLink[];
 }
 
 interface SidebarProps {
@@ -73,62 +79,126 @@ export function Sidebar({ projectId }: SidebarProps) {
     router.push('/login');
   };
 
-  const seoToolLinks: SidebarLink[] = [
-    { href: '/dashboard/keywords', icon: <Search size={18} />, label: 'Keyword Research', match: '/dashboard/keywords' },
-    { href: '/dashboard/domain-overview', icon: <Globe size={18} />, label: 'Domain Overview', match: '/dashboard/domain-overview' },
-    { href: '/dashboard/organic-rankings', icon: <TrendingUp size={18} />, label: 'Organic Rankings', match: '/dashboard/organic-rankings' },
-    { href: '/dashboard/top-pages', icon: <FileText size={18} />, label: 'Top Pages', match: '/dashboard/top-pages' },
-    { href: '/dashboard/compare-domains', icon: <BarChart3 size={18} />, label: 'Compare Domains', match: '/dashboard/compare-domains' },
-    { href: '/dashboard/keyword-gap', icon: <GitCompareArrows size={18} />, label: 'Keyword Gap', match: '/dashboard/keyword-gap' },
-    { href: '/dashboard/backlink-gap', icon: <Link2 size={18} />, label: 'Backlink Gap', match: '/dashboard/backlink-gap' },
-    { href: '/dashboard/backlinks', icon: <Network size={18} />, label: 'Backlinks', match: '/dashboard/backlinks' },
-    { href: '/dashboard/backlink-audit', icon: <ShieldAlert size={18} />, label: 'Backlink Audit', match: '/dashboard/backlink-audit' },
-    { href: '/dashboard/topic-research', icon: <Lightbulb size={18} />, label: 'Topic Research', match: '/dashboard/topic-research' },
-    { href: '/dashboard/content-template', icon: <ClipboardType size={18} />, label: 'SEO Content Template', match: '/dashboard/content-template' },
-    { href: '/dashboard/writing-assistant', icon: <PenTool size={18} />, label: 'Writing Assistant', match: '/dashboard/writing-assistant' },
-    { href: '/dashboard/gbp-optimization', icon: <MapPin size={18} />, label: 'GBP Optimization', match: '/dashboard/gbp-optimization' },
+  const mainGroup: SidebarGroup = {
+    label: 'Main',
+    links: [
+      { href: '/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard', match: '/dashboard', exact: true },
+    ],
+  };
+
+  const seoToolGroups: SidebarGroup[] = [
+    {
+      label: 'Keywords',
+      links: [
+        { href: '/dashboard/keywords', icon: <Search size={17} />, label: 'Keyword Research', match: '/dashboard/keywords' },
+        { href: '/dashboard/keyword-gap', icon: <GitCompareArrows size={17} />, label: 'Keyword Gap', match: '/dashboard/keyword-gap' },
+        { href: '/dashboard/topic-research', icon: <Lightbulb size={17} />, label: 'Topic Research', match: '/dashboard/topic-research' },
+      ],
+    },
+    {
+      label: 'Site & Rankings',
+      links: [
+        { href: '/dashboard/domain-overview', icon: <Globe size={17} />, label: 'Domain Overview', match: '/dashboard/domain-overview' },
+        { href: '/dashboard/organic-rankings', icon: <TrendingUp size={17} />, label: 'Organic Rankings', match: '/dashboard/organic-rankings' },
+        { href: '/dashboard/top-pages', icon: <FileText size={17} />, label: 'Top Pages', match: '/dashboard/top-pages' },
+        { href: '/dashboard/compare-domains', icon: <BarChart3 size={17} />, label: 'Compare Domains', match: '/dashboard/compare-domains' },
+      ],
+    },
+    {
+      label: 'Backlinks',
+      links: [
+        { href: '/dashboard/backlinks', icon: <Network size={17} />, label: 'Backlinks', match: '/dashboard/backlinks' },
+        { href: '/dashboard/backlink-audit', icon: <ShieldAlert size={17} />, label: 'Backlink Audit', match: '/dashboard/backlink-audit' },
+        { href: '/dashboard/backlink-gap', icon: <Link2 size={17} />, label: 'Backlink Gap', match: '/dashboard/backlink-gap' },
+      ],
+    },
+    {
+      label: 'Content',
+      links: [
+        { href: '/dashboard/content-template', icon: <ClipboardType size={17} />, label: 'SEO Content Template', match: '/dashboard/content-template' },
+        { href: '/dashboard/writing-assistant', icon: <PenTool size={17} />, label: 'Writing Assistant', match: '/dashboard/writing-assistant' },
+      ],
+    },
+    {
+      label: 'Local',
+      links: [
+        { href: '/dashboard/gbp-optimization', icon: <MapPin size={17} />, label: 'GBP Optimization', match: '/dashboard/gbp-optimization' },
+      ],
+    },
   ];
 
-  const mainLinks: SidebarLink[] = [
-    { href: '/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard', match: '/dashboard' },
-    ...(!projectId ? seoToolLinks : []),
-  ];
+  const otherGroup: SidebarGroup = {
+    label: 'Account',
+    links: [
+      { href: '/billing', icon: <CreditCard size={17} />, label: 'Billing & Plans', match: '/billing' },
+      { href: '/settings/integrations', icon: <Plug size={17} />, label: 'Integrations', match: '/settings' },
+      { href: '/dashboard/about', icon: <Info size={17} />, label: 'About', match: '/dashboard/about' },
+    ],
+  };
 
-  const otherLinks: SidebarLink[] = [
-    { href: '/billing', icon: <CreditCard size={18} />, label: 'Billing & Plans', match: '/billing' },
-    { href: '/settings/integrations', icon: <Plug size={18} />, label: 'Integrations', match: '/settings' },
-    { href: '/dashboard/about', icon: <Info size={18} />, label: 'About Platform', match: '/dashboard/about' },
-  ];
-
-  const projectLinks: SidebarLink[] = projectId
+  const projectGroups: SidebarGroup[] = projectId
     ? [
-        { href: `/dashboard/projects/${projectId}`, icon: <Compass size={18} />, label: 'Overview', match: `/dashboard/projects/${projectId}` },
-        { href: `/dashboard/projects/${projectId}/keywords`, icon: <Key size={18} />, label: 'Keywords', match: `/dashboard/projects/${projectId}/keywords` },
-        { href: `/dashboard/keywords?projectId=${projectId}`, icon: <Search size={18} />, label: 'Keyword Research', match: `/dashboard/keywords` },
-        { href: `/dashboard/projects/${projectId}/position-tracking`, icon: <Target size={18} />, label: 'Position Tracking', match: `/dashboard/projects/${projectId}/position-tracking` },
-        { href: `/dashboard/projects/${projectId}/audits`, icon: <ClipboardList size={18} />, label: 'Site Audit', match: `/dashboard/projects/${projectId}/audits` },
-        { href: `/dashboard/projects/${projectId}/domain-overview`, icon: <Globe size={18} />, label: 'Domain Overview', match: `/dashboard/projects/${projectId}/domain-overview` },
-        { href: `/dashboard/projects/${projectId}/organic-rankings`, icon: <TrendingUp size={18} />, label: 'Organic Rankings', match: `/dashboard/projects/${projectId}/organic-rankings` },
-        { href: `/dashboard/projects/${projectId}/top-pages`, icon: <FileText size={18} />, label: 'Top Pages', match: `/dashboard/projects/${projectId}/top-pages` },
-        { href: `/dashboard/projects/${projectId}/compare-domains`, icon: <BarChart3 size={18} />, label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
-        { href: `/dashboard/projects/${projectId}/keyword-gap`, icon: <GitCompareArrows size={18} />, label: 'Keyword Gap', match: `/dashboard/projects/${projectId}/keyword-gap` },
-        { href: `/dashboard/projects/${projectId}/backlink-gap`, icon: <Link2 size={18} />, label: 'Backlink Gap', match: `/dashboard/projects/${projectId}/backlink-gap` },
-        { href: `/dashboard/backlinks?projectId=${projectId}`, icon: <Network size={18} />, label: 'Backlinks', match: `/dashboard/backlinks` },
-        { href: `/dashboard/backlink-audit?projectId=${projectId}`, icon: <ShieldAlert size={18} />, label: 'Backlink Audit', match: `/dashboard/backlink-audit` },
-        { href: `/dashboard/topic-research?projectId=${projectId}`, icon: <Lightbulb size={18} />, label: 'Topic Research', match: `/dashboard/topic-research` },
-        { href: `/dashboard/content-template?projectId=${projectId}`, icon: <ClipboardType size={18} />, label: 'SEO Content Template', match: `/dashboard/content-template` },
-        { href: `/dashboard/writing-assistant?projectId=${projectId}`, icon: <PenTool size={18} />, label: 'Writing Assistant', match: `/dashboard/writing-assistant` },
-        { href: `/dashboard/projects/${projectId}/reports`, icon: <FileText size={18} />, label: 'Reports', match: `/dashboard/projects/${projectId}/reports` },
-        { href: `/dashboard/projects/${projectId}/settings`, icon: <Settings size={18} />, label: 'Settings', match: `/dashboard/projects/${projectId}/settings` },
+        {
+          label: 'Project',
+          links: [
+            { href: `/dashboard/projects/${projectId}`, icon: <Compass size={17} />, label: 'Overview', match: `/dashboard/projects/${projectId}`, exact: true },
+          ],
+        },
+        {
+          label: 'Keywords',
+          links: [
+            { href: `/dashboard/projects/${projectId}/keywords`, icon: <Key size={17} />, label: 'Keywords', match: `/dashboard/projects/${projectId}/keywords` },
+            { href: `/dashboard/keywords?projectId=${projectId}`, icon: <Search size={17} />, label: 'Keyword Research', match: `/dashboard/keywords` },
+            { href: `/dashboard/projects/${projectId}/position-tracking`, icon: <Target size={17} />, label: 'Position Tracking', match: `/dashboard/projects/${projectId}/position-tracking` },
+            { href: `/dashboard/projects/${projectId}/keyword-gap`, icon: <GitCompareArrows size={17} />, label: 'Keyword Gap', match: `/dashboard/projects/${projectId}/keyword-gap` },
+            { href: `/dashboard/topic-research?projectId=${projectId}`, icon: <Lightbulb size={17} />, label: 'Topic Research', match: `/dashboard/topic-research` },
+          ],
+        },
+        {
+          label: 'Site & Rankings',
+          links: [
+            { href: `/dashboard/projects/${projectId}/audits`, icon: <ClipboardList size={17} />, label: 'Site Audit', match: `/dashboard/projects/${projectId}/audits` },
+            { href: `/dashboard/projects/${projectId}/domain-overview`, icon: <Globe size={17} />, label: 'Domain Overview', match: `/dashboard/projects/${projectId}/domain-overview` },
+            { href: `/dashboard/projects/${projectId}/organic-rankings`, icon: <TrendingUp size={17} />, label: 'Organic Rankings', match: `/dashboard/projects/${projectId}/organic-rankings` },
+            { href: `/dashboard/projects/${projectId}/top-pages`, icon: <FileText size={17} />, label: 'Top Pages', match: `/dashboard/projects/${projectId}/top-pages` },
+            { href: `/dashboard/projects/${projectId}/compare-domains`, icon: <BarChart3 size={17} />, label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
+          ],
+        },
+        {
+          label: 'Backlinks',
+          links: [
+            { href: `/dashboard/backlinks?projectId=${projectId}`, icon: <Network size={17} />, label: 'Backlinks', match: `/dashboard/backlinks` },
+            { href: `/dashboard/backlink-audit?projectId=${projectId}`, icon: <ShieldAlert size={17} />, label: 'Backlink Audit', match: `/dashboard/backlink-audit` },
+            { href: `/dashboard/projects/${projectId}/backlink-gap`, icon: <Link2 size={17} />, label: 'Backlink Gap', match: `/dashboard/projects/${projectId}/backlink-gap` },
+          ],
+        },
+        {
+          label: 'Content',
+          links: [
+            { href: `/dashboard/content-template?projectId=${projectId}`, icon: <ClipboardType size={17} />, label: 'SEO Content Template', match: `/dashboard/content-template` },
+            { href: `/dashboard/writing-assistant?projectId=${projectId}`, icon: <PenTool size={17} />, label: 'Writing Assistant', match: `/dashboard/writing-assistant` },
+          ],
+        },
+        {
+          label: 'Reports & Settings',
+          links: [
+            { href: `/dashboard/projects/${projectId}/reports`, icon: <FileText size={17} />, label: 'Reports', match: `/dashboard/projects/${projectId}/reports` },
+            { href: `/dashboard/projects/${projectId}/settings`, icon: <Settings size={17} />, label: 'Settings', match: `/dashboard/projects/${projectId}/settings` },
+          ],
+        },
       ]
     : [];
 
+  // Strip query string for path-only matching against link.match.
+  const currentPath = router.asPath.split('?')[0];
+
   const isActive = (link: SidebarLink) => {
     if (!link.match) return false;
-    if (link.match === '/dashboard') {
-      return router.asPath === '/dashboard' || router.asPath === '/dashboard/';
+    const matchPath = link.match.split('?')[0];
+    if (link.exact) {
+      return currentPath === matchPath || currentPath === `${matchPath}/`;
     }
-    return router.asPath.startsWith(link.match);
+    return currentPath === matchPath || currentPath.startsWith(`${matchPath}/`);
   };
 
   const renderLink = (link: SidebarLink) => (
@@ -143,6 +213,13 @@ export function Sidebar({ projectId }: SidebarProps) {
         <span className="sidebar-link-badge">{link.badge}</span>
       )}
     </Link>
+  );
+
+  const renderGroup = (group: SidebarGroup, key: string | number) => (
+    <nav key={key} className="sidebar-nav">
+      {group.label && <div className="sidebar-nav-label">{group.label}</div>}
+      {group.links.map(renderLink)}
+    </nav>
   );
 
   return (
@@ -176,29 +253,22 @@ export function Sidebar({ projectId }: SidebarProps) {
 
       {/* Scrollable nav area */}
       <div className="sidebar-nav-scroll">
-        {/* Main Navigation */}
-        <nav className="sidebar-nav">
-          <div className="sidebar-nav-label">Main</div>
-          {mainLinks.map(renderLink)}
-        </nav>
+        {renderGroup(mainGroup, 'main')}
 
-        {/* Project Navigation */}
-        {projectId && projectLinks.length > 0 && (
+        {projectId ? (
           <>
             <div className="sidebar-divider" />
-            <nav className="sidebar-nav">
-              <div className="sidebar-nav-label">Project</div>
-              {projectLinks.map(renderLink)}
-            </nav>
+            {projectGroups.map((g, i) => renderGroup(g, `project-${i}`))}
+          </>
+        ) : (
+          <>
+            <div className="sidebar-divider" />
+            {seoToolGroups.map((g, i) => renderGroup(g, `tools-${i}`))}
           </>
         )}
 
-        {/* Other section */}
         <div className="sidebar-divider" />
-        <nav className="sidebar-nav">
-          <div className="sidebar-nav-label">Other</div>
-          {otherLinks.map(renderLink)}
-        </nav>
+        {renderGroup(otherGroup, 'account')}
       </div>
 
       {/* Footer */}

@@ -5,10 +5,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
 import { useProject } from '@/hooks/useProjects';
-import { useAudit, useCrawlIssues, useThematicReports, useCrawlComparison } from '@/hooks/useAudits';
+import { useAudit, useCrawlIssues, useThematicReports, useCrawlComparison, useChecklistReport } from '@/hooks/useAudits';
 import { apiClient, showSuccessToast } from '@repo/shared-frontend';
 import type { IssueSeverity, CrawlIssue, ThemeReport } from '@/types/audit';
 import { generateAuditPdf } from '@/utils/generateAuditPdf';
+import { ChecklistTable } from '@/components/site-audit/ChecklistTable';
 import styles from './[crawlId].module.css';
 
 const FIXABLE_TYPES = [
@@ -72,11 +73,13 @@ function CrawlDetailContent() {
   const [issuePage, setIssuePage] = useState(1);
   const [fixingIssue, setFixingIssue] = useState<string | null>(null);
   const [fixResult, setFixResult] = useState<Record<string, { method: string; details: string; prUrl?: string }>>({});
-  const [viewSection, setViewSection] = useState<'issues' | 'themes' | 'comparison'>('issues');
+  const [viewSection, setViewSection] = useState<'issues' | 'checklist' | 'themes' | 'comparison'>('issues');
   const [downloading, setDownloading] = useState(false);
 
   const { data: thematicReports } = useThematicReports(id, crawlId);
   const { data: comparison } = useCrawlComparison(id, crawlId, viewSection === 'comparison');
+  const { data: checklistReport, isLoading: checklistLoading, isError: checklistError } =
+    useChecklistReport(id, crawlId, viewSection === 'checklist');
 
   const handleDownloadPdf = async () => {
     setDownloading(true);
@@ -246,6 +249,12 @@ function CrawlDetailContent() {
               Issues
             </button>
             <button
+              className={`${styles.sectionNavBtn} ${viewSection === 'checklist' ? styles.sectionNavActive : ''}`}
+              onClick={() => setViewSection('checklist')}
+            >
+              Checklist (128)
+            </button>
+            <button
               className={`${styles.sectionNavBtn} ${viewSection === 'themes' ? styles.sectionNavActive : ''}`}
               onClick={() => setViewSection('themes')}
             >
@@ -258,6 +267,15 @@ function CrawlDetailContent() {
               Compare with Previous
             </button>
           </div>
+
+          {/* Checklist section */}
+          {viewSection === 'checklist' && (
+            <ChecklistTable
+              report={checklistReport}
+              isLoading={checklistLoading}
+              isError={checklistError}
+            />
+          )}
 
           {/* Thematic Reports Section */}
           {viewSection === 'themes' && (

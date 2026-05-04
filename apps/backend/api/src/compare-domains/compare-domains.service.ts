@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 interface DomainMetrics {
   domain: string;
@@ -111,37 +115,35 @@ export class CompareDomainsService {
   ): Promise<CompareDomainsData> {
     try {
       const domainList = domains.join(', ');
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          max_tokens: 4000,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO analyst. Compare domains side-by-side. Return JSON:
-{"domains":[{"domain":"<str>","authorityScore":<0-100>,"organicKeywords":<int>,"organicTraffic":<int>,"organicTrafficCost":<float>,"paidKeywords":<int>,"paidTraffic":<int>,"backlinks":<int>,"referringDomains":<int>,"trafficTrend":[{"date":"YYYY-MM","traffic":<int>}] 6 months}] one per domain,"keywordOverlap":{"shared":<int>,"unique":{"domain1":<int>,"domain2":<int>},"totalUniverse":<int>},"commonKeywords":[{"keyword":"<str>","volume":<int>,"positions":{"domain1":<1-100>,"domain2":<1-100>}}] 10 items,"intentComparison":{"domain1":{"informational":<int%>,"navigational":<int%>,"commercial":<int%>,"transactional":<int%>}}}
-Be realistic. Use actual domain names as keys.`,
-            },
-            {
-              role: 'user',
-              content: `Domains: ${domainList}\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+      const useSearch = isWebSearchEnabled('compare-domains');
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const baseSystem = `SEO analyst. Compare domains side-by-side. Return JSON:
+{"domains":[{"domain":"<str>","authorityScore":<0-100>,"organicKeywords":<int>,"organicTraffic":<int>,"organicTrafficCost":<float>,"paidKeywords":<int>,"paidTraffic":<int>,"backlinks":<int>,"referringDomains":<int>,"trafficTrend":[{"date":"YYYY-MM","traffic":<int>}] 6 months}] one per domain,"keywordOverlap":{"shared":<int>,"unique":{"domain1":<int>,"domain2":<int>},"totalUniverse":<int>},"commonKeywords":[{"keyword":"<str>","volume":<int>,"positions":{"domain1":<1-100>,"domain2":<1-100>}}] 10 items,"intentComparison":{"domain1":{"informational":<int%>,"navigational":<int%>,"commercial":<int%>,"transactional":<int%>}}}
+Use actual domain names as keys.`;
+
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to find real keywords each domain ranks for in the requested country and identify shared keywords. Use real positions in the SERP for the "positions" field.`
+        : baseSystem + `\nBe realistic.`;
+
+      const userPrompt = `Domains: ${domainList}\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.3,
+            maxTokens: 4000,
+          });
 
       return {
         domains: Array.isArray(parsed.domains) ? parsed.domains : [],

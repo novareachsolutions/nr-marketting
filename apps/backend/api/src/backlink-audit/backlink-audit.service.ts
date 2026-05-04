@@ -6,8 +6,12 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 type ToxicityLevel = 'clean' | 'suspicious' | 'toxic';
 type LinkStatus = 'pending' | 'keep' | 'flag' | 'disavow';
@@ -284,17 +288,9 @@ export class BacklinkAuditService {
     country: string,
   ): Promise<AiAuditResponse> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.4,
-          max_tokens: 6000,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO backlink audit analyst. Evaluate a realistic backlink profile for the given domain and identify toxic, suspicious, and clean links. Return ONLY this JSON structure:
+      const useSearch = isWebSearchEnabled('backlink-audit');
+
+      const baseSystem = `SEO backlink audit analyst. Evaluate a backlink profile for the given domain and identify toxic, suspicious, and clean links. Return ONLY this JSON structure:
 {
   "toxicityScore": <int 0-100 — percentage of profile that is suspicious+toxic>,
   "authorityScore": <int 0-100 — weighted avg authority of source domains>,
@@ -342,26 +338,32 @@ Rules:
 - insights: 4-6 actionable recommendations prioritized by severity.
 - Anchor distribution: top 8 anchors with percentages summing roughly to 100.
 - TLDs: 6-8 common ones. Categories: 5-6. Authority buckets: all 5 buckets filled (some may be 0).
-- Use realistic source URLs under plausible referring domains for the niche.
-- targetUrl should be under the audited domain.`,
-            },
-            {
-              role: 'user',
-              content: `Domain: "${domain}"\nCountry: ${country}\nRun the backlink audit.`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+- targetUrl should be under the audited domain.`;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\n- Use web search to find real pages linking to the domain. Use the actual source URLs, page titles, and anchor texts you find. Score toxicity based on what you observe about each source page (low-quality content, spammy patterns, link-farm signals). Generate exactly 30 link rows.`
+        : baseSystem +
+          `\n- Use realistic source URLs under plausible referring domains for the niche.`;
+
+      const userPrompt = `Domain: "${domain}"\nCountry: ${country}\nRun the backlink audit.`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.3,
+            maxTokens: 6000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.4,
+            maxTokens: 6000,
+          });
 
       // Defensive defaults
       const links: AiBacklinkRow[] = Array.isArray(parsed.links)

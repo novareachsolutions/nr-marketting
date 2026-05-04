@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
+import { SiteWideAuditService } from './site-wide-audit.service';
 
 interface RobotsRules {
   disallowedPaths: string[];
@@ -61,6 +62,26 @@ interface PageData {
   hasListContent: boolean;
   hasTableContent: boolean;
   directAnswerCount: number;
+  // Checklist signals (response headers + DOM details)
+  responseHeaders: Record<string, string>;
+  domNodeCount: number;
+  imagesLazyLoaded: number;
+  imagesWithoutDimensions: number;
+  imagesNonNextGen: number;
+  imagesPoorFilenames: number;
+  hasPreconnectHints: boolean;
+  hasFontDisplaySwap: boolean;
+  hreflangTags: { hreflang: string; href: string }[];
+  isAmpPage: boolean;
+  ampHtml: string | null;
+  hasGoogleAnalytics: boolean;
+  hasGoogleTagManager: boolean;
+  hasProductSchema: boolean;
+  hasArticleSchema: boolean;
+  underscoresInUrl: boolean;
+  hasExcessUrlParams: boolean;
+  ogImageDimensions: { width: number; height: number } | null;
+  headingHierarchyBroken: boolean;
 }
 
 interface CrawlIssueData {
@@ -84,7 +105,10 @@ const SKIP_EXTENSIONS = [
 export class CrawlerService {
   private readonly logger = new Logger(CrawlerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly siteWideAudit: SiteWideAuditService,
+  ) {}
 
   async executeCrawl(crawlJobId: string): Promise<void> {
     let crawlJob = await this.prisma.crawlJob.findUnique({
@@ -146,7 +170,8 @@ export class CrawlerService {
           const seoIssues = this.runSeoChecks(pageData);
           const geoIssues = this.runGeoChecks(pageData);
           const aeoIssues = this.runAeoChecks(pageData);
-          const issues = [...seoIssues, ...geoIssues, ...aeoIssues];
+          const checklistIssues = this.runChecklistChecks(pageData);
+          const issues = [...seoIssues, ...geoIssues, ...aeoIssues, ...checklistIssues];
 
           // Create CrawlPage record
           const crawlPage = await this.prisma.crawlPage.create({
@@ -282,6 +307,16 @@ export class CrawlerService {
       const postCrawlResult = await this.runPostCrawlChecks(crawlJobId);
       totalWarnings += postCrawlResult.warnings;
       totalNotices += postCrawlResult.notices;
+
+      // ---- Site-wide checks (robots.txt, sitemap.xml, redirects, SSL, favicon) ----
+      try {
+        const siteWideResult = await this.siteWideAudit.runSiteWideChecks(crawlJobId, domain);
+        totalErrors += siteWideResult.errors;
+        totalWarnings += siteWideResult.warnings;
+        totalNotices += siteWideResult.notices;
+      } catch (err) {
+        this.logger.warn(`Site-wide audit failed for ${crawlJobId}: ${err}`);
+      }
 
       // Calculate overall health score
       // With ~55 checks per page across SEO/GEO/AEO, we scale the denominator accordingly
@@ -456,7 +491,32 @@ export class CrawlerService {
       hasListContent: false,
       hasTableContent: false,
       directAnswerCount: 0,
+      // Checklist defaults
+      responseHeaders: this.normaliseHeaders(response.headers),
+      domNodeCount: 0,
+      imagesLazyLoaded: 0,
+      imagesWithoutDimensions: 0,
+      imagesNonNextGen: 0,
+      imagesPoorFilenames: 0,
+      hasPreconnectHints: false,
+      hasFontDisplaySwap: false,
+      hreflangTags: [],
+      isAmpPage: false,
+      ampHtml: null,
+      hasGoogleAnalytics: false,
+      hasGoogleTagManager: false,
+      hasProductSchema: false,
+      hasArticleSchema: false,
+      underscoresInUrl: /_/.test(new URL(url).pathname),
+      hasExcessUrlParams: false,
+      ogImageDimensions: null,
+      headingHierarchyBroken: false,
     };
+
+    try {
+      const u = new URL(url);
+      pageData.hasExcessUrlParams = u.searchParams.toString().length > 80;
+    } catch { /* ignore */ }
 
     // Only parse HTML
     if (!contentType.includes('text/html')) return pageData;
@@ -720,7 +780,111 @@ export class CrawlerService {
     });
     pageData.directAnswerCount = directAnswers;
 
+    // ===================== CHECKLIST SIGNALS =====================
+
+    // DOM node count
+    pageData.domNodeCount = $('*').length;
+
+    // Image-level checks
+    let lazyLoaded = 0;
+    let withoutDims = 0;
+    let nonNextGen = 0;
+    let poorFilenames = 0;
+    images.each((_: number, el: any) => {
+      const $img = $(el);
+      const loading = ($img.attr('loading') || '').toLowerCase();
+      if (loading === 'lazy') lazyLoaded++;
+      const w = $img.attr('width');
+      const h = $img.attr('height');
+      if (!w || !h) withoutDims++;
+      const src = ($img.attr('src') || '').toLowerCase();
+      if (src && !/(webp|avif)(\?|$)/.test(src) && /\.(jpe?g|png)(\?|$)/.test(src)) nonNextGen++;
+      if (src) {
+        const filename = src.split('/').pop()?.split('?')[0] || '';
+        if (/^(img|image|photo|pic|dsc|screenshot|untitled)?[-_]?\d{2,}/i.test(filename)) poorFilenames++;
+      }
+    });
+    pageData.imagesLazyLoaded = lazyLoaded;
+    pageData.imagesWithoutDimensions = withoutDims;
+    pageData.imagesNonNextGen = nonNextGen;
+    pageData.imagesPoorFilenames = poorFilenames;
+
+    // Performance hints
+    pageData.hasPreconnectHints =
+      $('link[rel="preconnect"], link[rel="dns-prefetch"]').length > 0;
+
+    // Font-display: swap (cheap heuristic — look in inline <style> blocks)
+    let fontDisplaySwap = false;
+    $('style').each((_: number, el: any) => {
+      const css = $(el).html() || '';
+      if (/font-display\s*:\s*swap/i.test(css)) fontDisplaySwap = true;
+    });
+    pageData.hasFontDisplaySwap = fontDisplaySwap;
+
+    // Hreflang tags
+    const hreflangs: { hreflang: string; href: string }[] = [];
+    $('link[rel="alternate"][hreflang]').each((_: number, el: any) => {
+      const hreflang = ($(el).attr('hreflang') || '').trim();
+      const href = ($(el).attr('href') || '').trim();
+      if (hreflang && href) hreflangs.push({ hreflang, href });
+    });
+    pageData.hreflangTags = hreflangs;
+
+    // AMP detection
+    pageData.isAmpPage = $('html[amp], html[\\u26A1]').length > 0 || /<html[^>]+\bamp\b/i.test(html);
+    pageData.ampHtml = pageData.isAmpPage ? html : null;
+
+    // Analytics / GTM
+    const lowerHtml = html.toLowerCase();
+    pageData.hasGoogleAnalytics =
+      lowerHtml.includes('googletagmanager.com/gtag/js') ||
+      lowerHtml.includes('google-analytics.com/analytics.js') ||
+      /gtag\(\s*['"]config['"]\s*,/.test(html) ||
+      lowerHtml.includes('ga(\'create\'');
+    pageData.hasGoogleTagManager =
+      lowerHtml.includes('googletagmanager.com/gtm.js') ||
+      /gtm[-_]?[a-z0-9]{4,}/i.test(html);
+
+    // Schema-type-specific flags
+    pageData.hasProductSchema = schemaTypes.includes('Product');
+    pageData.hasArticleSchema =
+      schemaTypes.includes('Article') ||
+      schemaTypes.includes('BlogPosting') ||
+      schemaTypes.includes('NewsArticle');
+
+    // OG image dimensions (declared via meta tags)
+    const ogImgW = parseInt($('meta[property="og:image:width"]').attr('content') || '0', 10);
+    const ogImgH = parseInt($('meta[property="og:image:height"]').attr('content') || '0', 10);
+    pageData.ogImageDimensions = ogImgW > 0 && ogImgH > 0 ? { width: ogImgW, height: ogImgH } : null;
+
+    // Heading hierarchy: no skipped levels (e.g. H1 → H4 with no H2/H3 in between)
+    const headingLevels: number[] = [];
+    $('h1, h2, h3, h4, h5, h6').each((_: number, el: any) => {
+      const tag = (el as any).tagName?.toLowerCase?.() || (el as any).name;
+      const m = /^h([1-6])$/i.exec(tag || '');
+      if (m) headingLevels.push(parseInt(m[1], 10));
+    });
+    let hierarchyBroken = false;
+    for (let i = 1; i < headingLevels.length; i++) {
+      if (headingLevels[i] > headingLevels[i - 1] + 1) {
+        hierarchyBroken = true;
+        break;
+      }
+    }
+    pageData.headingHierarchyBroken = hierarchyBroken;
+
     return pageData;
+  }
+
+  /** Lower-case header keys so we can do case-insensitive lookups later. */
+  private normaliseHeaders(headers: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (!headers || typeof headers !== 'object') return out;
+    for (const [k, v] of Object.entries(headers)) {
+      if (typeof v === 'string') out[k.toLowerCase()] = v;
+      else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out[k.toLowerCase()] = v.join(', ');
+    }
+    return out;
   }
 
   // ============================================================
@@ -917,6 +1081,125 @@ export class CrawlerService {
     // --- NOTICES ---
     if (page.questionHeadingsCount < 3 && page.wordCount > 500)
       issues.push({ type: 'LOW_QUESTION_COVERAGE', severity: 'NOTICE', dimension: d, message: `Only ${page.questionHeadingsCount} question heading(s) — more would improve PAA coverage`, suggestion: 'Add more who/what/when/where/why/how headings to address common user questions.' });
+
+    return issues;
+  }
+
+  // ============================================================
+  // CHECKLIST CHECKS (Technical SEO Audit Checklist - per page)
+  // ============================================================
+  private runChecklistChecks(page: PageData): CrawlIssueData[] {
+    const issues: CrawlIssueData[] = [];
+    const d = 'SEO' as const;
+    if (page.statusCode !== 200) return issues;
+
+    const h = page.responseHeaders;
+    const isHttps = page.url.startsWith('https://');
+
+    // ----- Security headers -----
+    if (isHttps && !h['strict-transport-security']) {
+      issues.push({ type: 'MISSING_HSTS_HEADER', severity: 'WARNING', dimension: d, message: 'Strict-Transport-Security header is missing', suggestion: 'Add HSTS header (e.g. "max-age=31536000; includeSubDomains") for HTTPS-only enforcement.' });
+    }
+    if (!h['content-security-policy']) {
+      issues.push({ type: 'MISSING_CSP_HEADER', severity: 'WARNING', dimension: d, message: 'Content-Security-Policy header is missing', suggestion: 'Add a CSP header to prevent XSS and code injection.' });
+    }
+    if (!h['x-frame-options']) {
+      issues.push({ type: 'MISSING_X_FRAME_OPTIONS', severity: 'WARNING', dimension: d, message: 'X-Frame-Options header is missing', suggestion: 'Add "X-Frame-Options: SAMEORIGIN" or "DENY" to prevent clickjacking.' });
+    }
+    if (!h['referrer-policy']) {
+      issues.push({ type: 'MISSING_REFERRER_POLICY', severity: 'NOTICE', dimension: d, message: 'Referrer-Policy header is missing', suggestion: 'Set Referrer-Policy (e.g. "strict-origin-when-cross-origin") to control referrer leaks.' });
+    }
+    if (!h['x-content-type-options']) {
+      issues.push({ type: 'MISSING_X_CONTENT_TYPE_OPTIONS', severity: 'NOTICE', dimension: d, message: 'X-Content-Type-Options header is missing', suggestion: 'Add "X-Content-Type-Options: nosniff" to prevent MIME-type sniffing.' });
+    }
+    if (!h['permissions-policy']) {
+      issues.push({ type: 'MISSING_PERMISSIONS_POLICY', severity: 'NOTICE', dimension: d, message: 'Permissions-Policy header is missing', suggestion: 'Add Permissions-Policy to control which browser features the page may use.' });
+    }
+    if (!h['cache-control'] && !h['expires']) {
+      issues.push({ type: 'MISSING_CACHE_HEADERS', severity: 'WARNING', dimension: d, message: 'No Cache-Control or Expires header set', suggestion: 'Configure caching headers for static assets to improve repeat-visit performance.' });
+    }
+    if (!h['content-encoding'] || !/gzip|br/.test(h['content-encoding'])) {
+      issues.push({ type: 'MISSING_COMPRESSION', severity: 'WARNING', dimension: d, message: 'Response is not gzip or brotli compressed', suggestion: 'Enable gzip or brotli compression on the server.' });
+    }
+
+    // ----- Performance / DOM -----
+    if (page.domNodeCount > 1500) {
+      issues.push({ type: 'EXCESSIVE_DOM_NODES', severity: 'WARNING', dimension: d, message: `Page has ${page.domNodeCount} DOM nodes (recommended: under 1,500)`, details: { nodeCount: page.domNodeCount }, suggestion: 'Simplify the DOM tree — too many nodes slow rendering.' });
+    }
+    if (page.imagesCount > 0 && page.imagesLazyLoaded === 0) {
+      issues.push({ type: 'MISSING_LAZY_LOADING', severity: 'WARNING', dimension: d, message: 'No images use loading="lazy"', suggestion: 'Add loading="lazy" to below-the-fold images to defer their loading.' });
+    }
+    if (page.imagesWithoutDimensions > 0) {
+      issues.push({ type: 'MISSING_IMG_DIMENSIONS', severity: 'WARNING', dimension: d, message: `${page.imagesWithoutDimensions} image(s) missing width/height attributes`, details: { count: page.imagesWithoutDimensions }, suggestion: 'Add explicit width and height to images to prevent CLS layout shifts.' });
+    }
+    if (page.imagesNonNextGen > 0) {
+      issues.push({ type: 'MISSING_NEXT_GEN_IMAGE_FORMAT', severity: 'NOTICE', dimension: d, message: `${page.imagesNonNextGen} image(s) use legacy formats (jpg/png) instead of WebP/AVIF`, suggestion: 'Convert images to WebP or AVIF for smaller file sizes.' });
+    }
+    if (page.imagesPoorFilenames > 0) {
+      issues.push({ type: 'IMAGE_FILENAME_NOT_DESCRIPTIVE', severity: 'NOTICE', dimension: d, message: `${page.imagesPoorFilenames} image(s) have non-descriptive filenames (e.g. IMG_1234.jpg)`, suggestion: 'Rename image files with descriptive, keyword-relevant names.' });
+    }
+    if (!page.hasPreconnectHints) {
+      issues.push({ type: 'MISSING_PRECONNECT_HINTS', severity: 'NOTICE', dimension: d, message: 'No preconnect or dns-prefetch hints found', suggestion: 'Add <link rel="preconnect"> for third-party origins (fonts, analytics, etc.) used by the page.' });
+    }
+    if (!page.hasFontDisplaySwap && /fonts\.(googleapis|gstatic)\.com/.test(JSON.stringify(page.responseHeaders) + page.url)) {
+      issues.push({ type: 'MISSING_FONT_DISPLAY_SWAP', severity: 'NOTICE', dimension: d, message: 'Web fonts may not use font-display: swap', suggestion: 'Use font-display: swap on @font-face rules so text renders while fonts load.' });
+    }
+
+    // ----- URL / architecture -----
+    if (page.underscoresInUrl) {
+      issues.push({ type: 'URL_USES_UNDERSCORES', severity: 'NOTICE', dimension: d, message: 'URL uses underscores instead of hyphens as word separators', suggestion: 'Use hyphens — Google treats hyphens as word separators but ignores underscores.' });
+    }
+    if (page.hasExcessUrlParams) {
+      issues.push({ type: 'URL_HAS_EXCESS_PARAMS', severity: 'WARNING', dimension: d, message: 'URL has an unusually long query string', suggestion: 'Simplify URLs — use clean paths instead of long parameter strings.' });
+    }
+    if (page.headingHierarchyBroken) {
+      issues.push({ type: 'HEADING_HIERARCHY_BROKEN', severity: 'WARNING', dimension: d, message: 'Heading hierarchy skips levels (e.g. H1 followed by H4)', suggestion: 'Use headings in order — H1 → H2 → H3 — without skipping levels.' });
+    }
+
+    // ----- Schema extras -----
+    if (page.hasOgTags && page.ogImageDimensions) {
+      const { width, height } = page.ogImageDimensions;
+      if (width < 1200 || height < 630) {
+        issues.push({ type: 'OG_IMAGE_TOO_SMALL', severity: 'WARNING', dimension: d, message: `og:image is ${width}x${height} (recommended: 1200x630 or larger)`, details: { width, height }, suggestion: 'Use an og:image of at least 1200x630px for proper social sharing previews.' });
+      }
+    }
+
+    // ----- International SEO -----
+    if (page.hreflangTags.length > 0) {
+      const validBcp47 = /^([a-z]{2,3})(-[A-Z]{2,4})?$|^x-default$/i;
+      const invalidCodes = page.hreflangTags.filter((t) => !validBcp47.test(t.hreflang));
+      if (invalidCodes.length > 0) {
+        issues.push({ type: 'HREFLANG_INVALID_CODE', severity: 'ERROR', dimension: d, message: `${invalidCodes.length} hreflang tag(s) use invalid BCP 47 codes`, details: { invalid: invalidCodes.map((t) => t.hreflang).slice(0, 5) }, suggestion: 'Use valid BCP 47 codes (e.g. "en-US", "es-MX", or "x-default").' });
+      }
+      const hasSelf = page.hreflangTags.some((t) => {
+        try { return new URL(t.href).pathname === new URL(page.url).pathname; } catch { return false; }
+      });
+      if (!hasSelf) {
+        issues.push({ type: 'HREFLANG_MISSING_SELF', severity: 'WARNING', dimension: d, message: 'Hreflang set does not include a self-referencing annotation', suggestion: 'Each hreflang group must list every locale, including the current page.' });
+      }
+      const hasXDefault = page.hreflangTags.some((t) => t.hreflang.toLowerCase() === 'x-default');
+      if (!hasXDefault) {
+        issues.push({ type: 'HREFLANG_MISSING_X_DEFAULT', severity: 'WARNING', dimension: d, message: 'Hreflang set does not include x-default', suggestion: 'Add a hreflang="x-default" entry pointing to your default-language page.' });
+      }
+    }
+
+    // ----- Tracking / tags -----
+    if (!page.hasGoogleAnalytics && !page.hasGoogleTagManager) {
+      issues.push({ type: 'GA_TRACKING_MISSING', severity: 'WARNING', dimension: d, message: 'No Google Analytics or GTM tags detected on the page', suggestion: 'Install GA4 or Tag Manager to measure traffic and conversions.' });
+    }
+    if (page.hasGoogleAnalytics && !page.hasGoogleTagManager && page.url.endsWith('/')) {
+      issues.push({ type: 'GTM_TAG_MISSING', severity: 'NOTICE', dimension: d, message: 'GA detected but no Tag Manager — consider centralising tags via GTM', suggestion: 'Tag Manager makes it easier to maintain analytics, conversion, and ad pixels.' });
+    }
+
+    // ----- AMP -----
+    if (page.isAmpPage && page.ampHtml) {
+      const html = page.ampHtml;
+      const hasAmpScript = /<script[^>]+src=["'][^"']*cdn\.ampproject\.org/i.test(html);
+      const hasCanonical = !!page.canonicalUrl;
+      if (!hasAmpScript || !hasCanonical) {
+        issues.push({ type: 'AMP_INVALID', severity: 'WARNING', dimension: d, message: 'AMP page is missing required boilerplate (AMP script or canonical link)', suggestion: 'Validate AMP pages with the AMP validator and ensure each has a canonical link.' });
+      }
+    }
 
     return issues;
   }

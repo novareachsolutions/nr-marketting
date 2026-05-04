@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 type LinkType = 'follow' | 'nofollow';
 
@@ -132,17 +136,9 @@ export class BacklinksService {
     country: string,
   ): Promise<BacklinksData> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.4,
-          max_tokens: 4500,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO backlink analyst. Generate a realistic backlink profile for the given domain. Estimates should reflect the domain's actual authority/niche. Return ONLY this JSON structure:
+      const useSearch = isWebSearchEnabled('backlinks');
+
+      const baseSystem = `SEO backlink analyst. Build a backlink profile for the given domain. Return ONLY this JSON structure:
 {
   "overview": {
     "totalBacklinks": <int>,
@@ -166,25 +162,32 @@ export class BacklinksService {
   "tldDistribution": [{"label":"<str>","count":<int>,"percentage":<float>}],
   "categoryDistribution": [{"label":"<str>","count":<int>,"percentage":<float>}]
 }
-Counts: trend=12 months (most recent last); topReferringDomains=15; anchorDistribution=10 (include branded, naked URL, and partial-match anchors); topBacklinks=15; newBacklinks=6; lostBacklinks=4; tldDistribution=8; categoryDistribution=6. Make followBacklinks+nofollowBacklinks=totalBacklinks. dofollowPercent=round(followBacklinks/totalBacklinks*100). Use realistic referring-domain names for the niche, plausible source URLs under those domains, varied anchor texts (brand, exact, partial, generic like "click here", naked URLs). Categories like "Technology","News","Blog","Business","Education","Forum","Directory". TLDs like ".com",".org",".net",".co",".io",".edu",".gov",".co.${country.toLowerCase()}".`,
-            },
-            {
-              role: 'user',
-              content: `Domain: "${domain}"\nCountry: ${country}\nGenerate the backlink profile.`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+Counts: trend=12 months (most recent last); topReferringDomains=15; anchorDistribution=10 (include branded, naked URL, and partial-match anchors); topBacklinks=15; newBacklinks=6; lostBacklinks=4; tldDistribution=8; categoryDistribution=6. Make followBacklinks+nofollowBacklinks=totalBacklinks. dofollowPercent=round(followBacklinks/totalBacklinks*100). Categories like "Technology","News","Blog","Business","Education","Forum","Directory". TLDs like ".com",".org",".net",".co",".io",".edu",".gov",".co.${country.toLowerCase()}".`;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to find real pages linking to this domain (search for "link:${domain}" and the domain name across the web). Use the actual source URLs, titles, and anchor texts you find. Where exact link counts are unknowable, estimate conservatively.`
+        : baseSystem +
+          `\nGenerate a realistic profile reflecting the domain's actual authority/niche. Use realistic referring-domain names for the niche, plausible source URLs, varied anchor texts (brand, exact, partial, generic like "click here", naked URLs).`;
+
+      const userPrompt = `Domain: "${domain}"\nCountry: ${country}\nGenerate the backlink profile.`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.3,
+            maxTokens: 4500,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.4,
+            maxTokens: 4500,
+          });
 
       const overview: BacklinksOverview = parsed.overview || {
         totalBacklinks: 0,

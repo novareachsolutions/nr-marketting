@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 interface DomainOverviewData {
   domain: string;
@@ -171,16 +175,9 @@ export class DomainOverviewService {
     country: string,
   ): Promise<DomainOverviewData> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an SEO domain analyst. Given a domain and country, estimate realistic domain overview metrics based on your knowledge. Return ONLY valid JSON with this exact structure:
+      const useSearch = isWebSearchEnabled('domain-overview');
+
+      const baseSystem = `You are an SEO domain analyst. Given a domain and country, return JSON with the exact structure:
 {
   "authorityScore": <0-100 integer, domain authority estimate>,
   "authorityTrend": [<6 integers, authority scores for last 6 months, oldest first>],
@@ -201,26 +198,33 @@ export class DomainOverviewService {
   "topOrganicPages": [{"url": "<path>", "traffic": <int>, "keywords": <int>}] (top 10),
   "topCompetitors": [{"domain": "<str>", "commonKeywords": <int>, "organicKeywords": <int>, "organicTraffic": <int>}] (top 10),
   "countryDistribution": [{"country": "<2-letter code>", "trafficShare": <float 0-100>}] (top 5 countries)
-}
-Base your estimates on real-world knowledge. Be realistic. For well-known domains provide accurate-ish data. For unknown domains provide conservative estimates. Use the country for the primary market context.`,
-            },
-            {
-              role: 'user',
-              content: `Domain: "${domain}"\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
+}`;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to find real top-ranking pages on this domain, real competitor domains, and real keywords the domain ranks for in the requested country. Use the country for primary market context.`
+        : baseSystem +
+          `\nBase estimates on real-world knowledge. Be realistic. For well-known domains provide accurate-ish data. For unknown domains provide conservative estimates. Use the country for primary market context.`;
+
+      const userPrompt = `Domain: "${domain}"\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.3,
+            maxTokens: 3000,
+            timeout: 30000,
+          });
 
       return {
         domain,

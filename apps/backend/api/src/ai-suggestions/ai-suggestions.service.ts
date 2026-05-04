@@ -2,6 +2,10 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 @Injectable()
 export class AiSuggestionsService {
@@ -61,29 +65,48 @@ export class AiSuggestionsService {
     const model = (module === 'suggest-competitors' || module === 'topic-research') ? 'gpt-4o' : 'gpt-4o-mini';
 
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model,
-          temperature: 0.5,
-          max_tokens: 1000,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
+      let parsed: any;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      if (module === 'suggest-competitors' && isWebSearchEnabled('ai-suggestions')) {
+        const searchSystem =
+          systemPrompt +
+          `\n\nUse web search to find real, currently active competitor websites in the same niche. Verify each domain exists and is in the same market before including it.`;
+
+        parsed = await callOpenAIJsonWithSearch({
+          apiKey: this.openaiKey,
+          systemPrompt: searchSystem,
+          userPrompt,
+          country: context.country,
+          model: 'gpt-4o',
+          temperature: 0.4,
+          maxTokens: 1500,
+        });
+      } else {
+        const response = await axios.post(
+          'https://api.openai.com/v1/chat/completions',
+          {
+            model,
+            temperature: 0.5,
+            max_tokens: 1000,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.openaiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+          },
+        );
+
+        const content = response.data.choices?.[0]?.message?.content;
+        parsed = JSON.parse(content);
+      }
+
       const suggestions = Array.isArray(parsed.suggestions)
         ? parsed.suggestions.slice(0, 5)
         : [];

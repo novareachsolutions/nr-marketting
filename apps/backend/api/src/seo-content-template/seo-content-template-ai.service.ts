@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 export interface RivalItem {
   rank: number;
@@ -55,7 +59,7 @@ export class SeoContentTemplateAiService {
     const systemPrompt = this.buildSystemPrompt();
     const userPrompt = this.buildUserPrompt(keywords, country);
 
-    const raw = await this.callOpenAI(systemPrompt, userPrompt, 4000);
+    const raw = await this.callOpenAI(systemPrompt, userPrompt, 4000, country);
     const brief = this.normalizeBrief(raw, keywords);
 
     await this.setCache(cacheKey, brief as any);
@@ -205,31 +209,36 @@ Generate the SEO content brief JSON now.`;
     systemPrompt: string,
     userPrompt: string,
     maxTokens: number,
+    country: string,
   ): Promise<Record<string, any>> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o',
-          temperature: 0.4,
-          max_tokens: maxTokens,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 60000,
-        },
-      );
+      const useSearch = isWebSearchEnabled('seo-content-template');
 
-      const content = response.data.choices?.[0]?.message?.content;
-      return JSON.parse(content);
+      if (useSearch) {
+        const searchSystem =
+          systemPrompt +
+          `\n\nUse web search to fetch the actual top 10 Google-ranking URLs for the target keywords in the requested country, and use their real titles and snippets. Use real referring-domain candidates that link to those pages where possible.`;
+
+        return await callOpenAIJsonWithSearch({
+          apiKey: this.openaiKey,
+          systemPrompt: searchSystem,
+          userPrompt,
+          country,
+          model: 'gpt-4o',
+          temperature: 0.3,
+          maxTokens,
+        });
+      }
+
+      return await callOpenAIJson({
+        apiKey: this.openaiKey,
+        systemPrompt,
+        userPrompt,
+        model: 'gpt-4o',
+        temperature: 0.4,
+        maxTokens,
+        timeout: 60000,
+      });
     } catch (err: any) {
       this.logger.error(`OpenAI error: ${err?.message}`);
       throw new BadRequestException('AI request failed. Please try again.');

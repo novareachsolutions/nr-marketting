@@ -9,6 +9,7 @@ import type {
   ScoreHistoryEntry,
   IssueTrends,
   PaginatedResponse,
+  ChecklistReport,
 } from '@/types/audit';
 
 export function useAudits(projectId: string, page: number = 1, perPage: number = 10) {
@@ -117,5 +118,18 @@ export function useIssueTrends(projectId: string, limit: number = 10) {
     `/projects/${projectId}/audit-analytics/issue-trends?limit=${limit}`,
     ['issueTrends', projectId, String(limit)],
     { enabled: !!projectId, staleTime: 30000 },
+  );
+}
+
+// 128-item Technical SEO Audit Checklist
+export function useChecklistReport(
+  projectId: string,
+  crawlId: string,
+  enabled: boolean = true,
+) {
+  return useGet<ChecklistReport>(
+    `/projects/${projectId}/crawls/${crawlId}/checklist`,
+    ['checklistReport', crawlId],
+    { enabled: enabled && !!projectId && !!crawlId, staleTime: 30000 },
   );
 }

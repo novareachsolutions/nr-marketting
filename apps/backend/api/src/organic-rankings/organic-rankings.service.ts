@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 type ChangeType = 'improved' | 'declined' | 'new' | 'lost';
 type SearchIntent = 'informational' | 'navigational' | 'commercial' | 'transactional';
@@ -124,37 +128,34 @@ export class OrganicRankingsService {
     country: string,
   ): Promise<OrganicRankingsData> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          max_tokens: 3000,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO analyst. Return JSON with organic ranking estimates for a domain.
-{"summary":{"totalOrganicKeywords":<int>,"organicMonthlyTraffic":<int>,"organicTrafficCost":<float>,"brandedTrafficPercent":<int>,"nonBrandedTrafficPercent":<int>},"positions":[{"keyword":"<str>","position":<1-100>,"previousPosition":<int|null>,"volume":<int>,"trafficPercent":<float>,"trafficCost":<float>,"url":"<path>","serpFeatures":[],"intent":"informational","kd":<0-100>,"cpc":<float>,"lastUpdated":"2026-04-01"}] 10 items,"positionChanges":[{"keyword":"<str>","changeType":"improved","oldPosition":<int|null>,"newPosition":<int|null>,"change":<int>,"volume":<int>,"url":"<path>","trafficImpact":<int>}] 8 items (2 each: improved/declined/new/lost),"competitors":[{"domain":"<str>","commonKeywords":<int>,"seKeywords":<int>,"seTraffic":<int>,"trafficCost":<float>,"paidKeywords":<int>}] 5 items,"pages":[{"url":"<path>","trafficPercent":<float>,"keywords":<int>,"traffic":<int>}] 5 items}
-Be realistic. Short URLs.`,
-            },
-            {
-              role: 'user',
-              content: `Domain: "${domain}"\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+      const useSearch = isWebSearchEnabled('organic-rankings');
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const baseSystem = `SEO analyst. Return JSON with organic ranking data for a domain.
+{"summary":{"totalOrganicKeywords":<int>,"organicMonthlyTraffic":<int>,"organicTrafficCost":<float>,"brandedTrafficPercent":<int>,"nonBrandedTrafficPercent":<int>},"positions":[{"keyword":"<str>","position":<1-100>,"previousPosition":<int|null>,"volume":<int>,"trafficPercent":<float>,"trafficCost":<float>,"url":"<path>","serpFeatures":[],"intent":"informational","kd":<0-100>,"cpc":<float>,"lastUpdated":"2026-04-01"}] 10 items,"positionChanges":[{"keyword":"<str>","changeType":"improved","oldPosition":<int|null>,"newPosition":<int|null>,"change":<int>,"volume":<int>,"url":"<path>","trafficImpact":<int>}] 8 items (2 each: improved/declined/new/lost),"competitors":[{"domain":"<str>","commonKeywords":<int>,"seKeywords":<int>,"seTraffic":<int>,"trafficCost":<float>,"paidKeywords":<int>}] 5 items,"pages":[{"url":"<path>","trafficPercent":<float>,"keywords":<int>,"traffic":<int>}] 5 items}`;
+
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to identify keywords this domain ranks for in Google for the requested country, and the actual ranking URLs. Use real competitor domains and real top pages of this domain. Short URLs.`
+        : baseSystem + `\nBe realistic. Short URLs.`;
+
+      const userPrompt = `Domain: "${domain}"\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.3,
+            maxTokens: 3000,
+          });
 
       return {
         domain,

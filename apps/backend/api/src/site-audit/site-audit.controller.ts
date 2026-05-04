@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ProjectOwnerGuard } from '../common/guards/project-owner.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { SiteAuditService } from './site-audit.service';
+import { ChecklistService } from './checklist/checklist.service';
 
 // Phase C: Project-level audit analytics (score history, issue trends)
 @Controller('projects/:id/audit-analytics')
@@ -49,7 +50,10 @@ export class AuditAnalyticsController {
 @Controller('projects/:id/crawls')
 @UseGuards(JwtAuthGuard, ProjectOwnerGuard)
 export class SiteAuditController {
-  constructor(private readonly siteAuditService: SiteAuditService) {}
+  constructor(
+    private readonly siteAuditService: SiteAuditService,
+    private readonly checklistService: ChecklistService,
+  ) {}
 
   @Post()
   async startCrawl(
@@ -144,6 +148,13 @@ export class SiteAuditController {
   @Get(':crawlId/themes')
   async getThematicReports(@Param('crawlId') crawlId: string) {
     const result = await this.siteAuditService.getThematicReports(crawlId);
+    return { success: true, data: result };
+  }
+
+  // 128-item Technical SEO Audit checklist
+  @Get(':crawlId/checklist')
+  async getChecklist(@Param('crawlId') crawlId: string) {
+    const result = await this.checklistService.getChecklistReport(crawlId);
     return { success: true, data: result };
   }
 

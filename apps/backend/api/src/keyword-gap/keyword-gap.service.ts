@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 type GapType = 'shared' | 'missing' | 'weak' | 'strong' | 'untapped' | 'unique';
 type SearchIntent = 'informational' | 'navigational' | 'commercial' | 'transactional';
@@ -104,38 +108,35 @@ export class KeywordGapService {
     try {
       const yourDomain = domains[0];
       const competitors = domains.slice(1);
+      const useSearch = isWebSearchEnabled('keyword-gap');
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          max_tokens: 3000,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO keyword gap analyst. First domain="you", rest=competitors. Return JSON:
+      const baseSystem = `SEO keyword gap analyst. First domain="you", rest=competitors. Return JSON:
 {"summary":{"totalKeywords":<int>,"shared":<int>,"missing":<int>,"weak":<int>,"strong":<int>,"untapped":<int>,"unique":<int>},"keywords":[{"keyword":"<str>","volume":<int>,"kd":<0-100>,"cpc":<float>,"intent":"informational","positions":{"dom1":<int|null>},"gapType":"shared"}] 15 items}
-gapType: shared=all rank, missing=competitors rank you don't, weak=you lower, strong=you higher, untapped=you don't rank 1+ competitor does, unique=only you. Use actual domain names. Mix: 3 shared,3 missing,2 weak,3 strong,2 untapped,2 unique. Realistic.`,
-            },
-            {
-              role: 'user',
-              content: `Your domain: "${yourDomain}"\nCompetitors: ${competitors.join(', ')}\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+gapType: shared=all rank, missing=competitors rank you don't, weak=you lower, strong=you higher, untapped=you don't rank 1+ competitor does, unique=only you. Use actual domain names. Mix: 3 shared,3 missing,2 weak,3 strong,2 untapped,2 unique.`;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to find real keywords each domain ranks for in the requested country, then compare. The "positions" map should use the domain string as key and the actual SERP position (1-100) as value, or null if not in top 100.`
+        : baseSystem + `\nRealistic.`;
+
+      const userPrompt = `Your domain: "${yourDomain}"\nCompetitors: ${competitors.join(', ')}\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.3,
+            maxTokens: 3000,
+          });
 
       return {
         domains,

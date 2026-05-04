@@ -1,7 +1,11 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 type BacklinkGapType = 'best' | 'weak' | 'strong' | 'shared' | 'unique';
 
@@ -95,38 +99,35 @@ export class BacklinkGapService {
     try {
       const yourDomain = domains[0];
       const competitors = domains.slice(1);
+      const useSearch = isWebSearchEnabled('backlink-gap');
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          max_tokens: 3000,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `SEO backlink gap analyst. First domain="you", rest=competitors. Return JSON:
+      const baseSystem = `SEO backlink gap analyst. First domain="you", rest=competitors. Return JSON:
 {"summary":{"totalReferringDomains":<int>,"best":<int>,"weak":<int>,"strong":<int>,"shared":<int>,"unique":<int>},"backlinkTrend":[{"date":"YYYY-MM","dom1":<int>,"dom2":<int>}] 6 months,"referringDomains":[{"domain":"<str>","authorityScore":<0-100>,"monthlyVisits":<int>,"matches":<int>,"backlinksPerDomain":{"dom1":<int>,"dom2":<int>},"gapType":"best"}] 15 items}
-gapType: best=links to all competitors not you, weak=links to you less than competitors, strong=links to you not competitors, shared=links to you+competitors, unique=links to only one domain. Use actual domain names as keys. Mix: 4 best,3 weak,3 strong,3 shared,2 unique. Realistic referring domains.`,
-            },
-            {
-              role: 'user',
-              content: `Your domain: "${yourDomain}"\nCompetitors: ${competitors.join(', ')}\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 120000,
-        },
-      );
+gapType: best=links to all competitors not you, weak=links to you less than competitors, strong=links to you not competitors, shared=links to you+competitors, unique=links to only one domain. Use actual domain names as keys. Mix: 4 best,3 weak,3 strong,3 shared,2 unique.`;
 
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to find sites that actually link to each domain (search the web for mentions/links). Use real referring domains and their actual link counts where discoverable; estimate conservatively where they aren't.`
+        : baseSystem + `\nRealistic referring domains.`;
+
+      const userPrompt = `Your domain: "${yourDomain}"\nCompetitors: ${competitors.join(', ')}\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            temperature: 0.3,
+            maxTokens: 3000,
+          });
 
       return {
         domains,

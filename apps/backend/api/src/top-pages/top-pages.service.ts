@@ -2,7 +2,11 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { normalizeDomain } from '../common/utils/domain';
-import { callOpenAIJson } from '../common/utils/openai';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 import { incrementDailyUsage } from '../common/utils/usage';
 
 interface TopPagesData {
@@ -80,13 +84,31 @@ export class TopPagesService {
 
   private async fetchFromOpenAI(domain: string, country: string): Promise<TopPagesData> {
     try {
-      const parsed = await callOpenAIJson({
-        apiKey: this.openaiKey,
-        systemPrompt: `SEO analyst. Return JSON estimating top pages for a domain.
-{"summary":{"totalPages":<int>,"totalOrganicTraffic":<int>,"avgKeywordsPerPage":<int>},"pages":[{"url":"<path>","traffic":<int>,"trafficPercent":<float>,"keywords":<int>,"topKeyword":"<str>","topKeywordPosition":<1-100>,"backlinks":<int>,"trafficTrend":[<6 ints>]}] 10 items by traffic desc}
-Short paths. Realistic.`,
-        userPrompt: `Domain: "${domain}"\nCountry: ${country}`,
-      });
+      const useSearch = isWebSearchEnabled('top-pages');
+      const baseSystem = `SEO analyst. Return JSON listing top pages for a domain.
+{"summary":{"totalPages":<int>,"totalOrganicTraffic":<int>,"avgKeywordsPerPage":<int>},"pages":[{"url":"<path>","traffic":<int>,"trafficPercent":<float>,"keywords":<int>,"topKeyword":"<str>","topKeywordPosition":<1-100>,"backlinks":<int>,"trafficTrend":[<6 ints>]}] 10 items by traffic desc}`;
+
+      const systemPrompt = useSearch
+        ? baseSystem +
+          `\nUse web search to identify the actual highest-traffic pages on the domain in the requested country, the keywords that drive their traffic, and where those keywords rank. Short paths.`
+        : baseSystem + `\nShort paths. Realistic.`;
+
+      const userPrompt = `Domain: "${domain}"\nCountry: ${country}`;
+
+      const parsed: any = useSearch
+        ? await callOpenAIJsonWithSearch({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+            country,
+            temperature: 0.2,
+            maxTokens: 4000,
+          })
+        : await callOpenAIJson({
+            apiKey: this.openaiKey,
+            systemPrompt,
+            userPrompt,
+          });
 
       return {
         domain,

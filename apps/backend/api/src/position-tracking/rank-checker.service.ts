@@ -1,7 +1,11 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  callOpenAIJson,
+  callOpenAIJsonWithSearch,
+  isWebSearchEnabled,
+} from '../common/utils/openai';
 
 interface PositionResult {
   keyword: string;
@@ -201,17 +205,9 @@ export class RankCheckerService {
     device: string,
   ): Promise<PositionResult[]> {
     const keywordList = keywords.map((k, i) => `${i + 1}. "${k}"`).join('\n');
+    const useSearch = isWebSearchEnabled('position-tracking');
 
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: `You are a SERP analysis expert. Given a domain and a list of keywords, estimate where the domain would realistically rank on Google for each keyword. Consider the domain's likely authority, relevance, and content.
+    const baseSystem = `You are a SERP analysis expert. Given a domain and a list of keywords, determine where the domain ranks on Google for each keyword.
 
 Return ONLY valid JSON with this structure:
 {
@@ -219,36 +215,44 @@ Return ONLY valid JSON with this structure:
     {
       "keyword": "<the keyword>",
       "position": <integer 1-100 or null if not ranking in top 100>,
-      "rankingUrl": "<the likely URL path on the domain that would rank, e.g. /blog/seo-guide, or null>",
+      "rankingUrl": "<the URL on the domain that ranks, or null>",
       "serpFeatures": [<array of SERP features present for this keyword, from: "featured_snippet", "people_also_ask", "sitelinks", "local_pack", "knowledge_graph", "video", "image_pack", "top_stories", "shopping", "reviews">]
     }
   ]
-}
+}`;
 
-Be realistic:
+    const searchSystem =
+      baseSystem +
+      `\n\nUse web search to look up the live Google SERP for each keyword in the requested country. Report the actual position of the domain (1-100) and the actual URL that ranks. If the domain is not in the top 100, return null. Identify SERP features visible in the results.`;
+
+    const estimateSystem =
+      baseSystem +
+      `\n\nBe realistic:
 - New/small domains typically rank position 20-100 or not at all
 - Well-established domains with relevant content rank 1-20
 - Very competitive keywords are harder to rank for
 - Include null position for keywords the domain likely doesn't rank for
-- Vary positions realistically — don't give the same position for all keywords`,
-          },
-          {
-            role: 'user',
-            content: `Domain: ${domain}\nCountry: ${country}\nDevice: ${device}\n\nKeywords:\n${keywordList}`,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${this.openaiKey}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      },
-    );
+- Vary positions realistically — don't give the same position for all keywords`;
 
-    const content = response.data.choices?.[0]?.message?.content;
-    const parsed = JSON.parse(content);
+    const userPrompt = `Domain: ${domain}\nCountry: ${country}\nDevice: ${device}\n\nKeywords:\n${keywordList}`;
+
+    const parsed: any = useSearch
+      ? await callOpenAIJsonWithSearch({
+          apiKey: this.openaiKey,
+          systemPrompt: searchSystem,
+          userPrompt,
+          country,
+          temperature: 0.2,
+          maxTokens: 4000,
+        })
+      : await callOpenAIJson({
+          apiKey: this.openaiKey,
+          systemPrompt: estimateSystem,
+          userPrompt,
+          temperature: 0.3,
+          maxTokens: 3000,
+          timeout: 30000,
+        });
 
     if (!Array.isArray(parsed.results)) {
       throw new Error('Invalid OpenAI response format');
