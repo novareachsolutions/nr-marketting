@@ -37,7 +37,7 @@ export class SeoContentTemplateAiService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
   }
 
@@ -224,7 +224,6 @@ Generate the SEO content brief JSON now.`;
           systemPrompt: searchSystem,
           userPrompt,
           country,
-          model: 'gpt-4o',
           temperature: 0.3,
           maxTokens,
         });
@@ -234,13 +233,12 @@ Generate the SEO content brief JSON now.`;
         apiKey: this.openaiKey,
         systemPrompt,
         userPrompt,
-        model: 'gpt-4o',
         temperature: 0.4,
         maxTokens,
         timeout: 60000,
       });
     } catch (err: any) {
-      this.logger.error(`OpenAI error: ${err?.message}`);
+      this.logger.error(`Anthropic error: ${err?.message}`);
       throw new BadRequestException('AI request failed. Please try again.');
     }
   }

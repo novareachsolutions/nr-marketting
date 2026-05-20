@@ -43,7 +43,7 @@ export class BacklinkGapService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
 
     if (!this.hasOpenAI) {

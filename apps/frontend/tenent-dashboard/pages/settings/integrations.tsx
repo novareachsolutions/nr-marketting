@@ -231,65 +231,102 @@ function IntegrationsContent() {
                 </button>
               ) : (
                 <>
-                  {/* Property selection */}
+                  {/* Auto-match info */}
                   <div className={styles.propertiesSection}>
                     <div className={styles.propertiesSectionTitle}>
-                      Select Properties
+                      Connected — auto-detecting properties per project
                     </div>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, marginBottom: 12 }}>
+                      For each project, we automatically match your Search Console
+                      properties against the project's domain. No manual setup needed.
+                    </p>
 
                     {loadingProperties ? (
                       <div className={styles.loading}>
-                        Loading properties...
+                        Loading your properties...
                       </div>
                     ) : (
-                      <>
-                        <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>
-                            Search Console Site
-                          </label>
-                          <select
-                            className={styles.select}
-                            value={selectedGsc}
-                            onChange={(e) => setSelectedGsc(e.target.value)}
-                          >
-                            <option value="">-- Select a site --</option>
-                            {gscSites.map((site) => (
-                              <option key={site.siteUrl} value={site.siteUrl}>
-                                {site.siteUrl}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>
-                            Google Analytics Property
-                          </label>
-                          <select
-                            className={styles.select}
-                            value={selectedGa}
-                            onChange={(e) => setSelectedGa(e.target.value)}
-                          >
-                            <option value="">-- Select a property --</option>
-                            {gaProperties.map((prop) => (
-                              <option
-                                key={prop.propertyId}
-                                value={prop.propertyId}
-                              >
-                                {prop.displayName} ({prop.propertyId})
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <button
-                          className={styles.saveBtn}
-                          onClick={handleSaveProperties}
-                          disabled={saving}
+                      <details style={{ marginTop: 8 }}>
+                        <summary
+                          style={{
+                            fontSize: 12,
+                            color: 'var(--text-tertiary)',
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                          }}
                         >
-                          {saving ? 'Saving...' : 'Save Selection'}
-                        </button>
-                      </>
+                          Advanced: manually override the default site/property
+                        </summary>
+                        <div style={{ marginTop: 12 }}>
+                          <div className={styles.fieldGroup}>
+                            <label className={styles.fieldLabel}>
+                              Default Search Console Site (fallback)
+                            </label>
+                            <select
+                              className={styles.select}
+                              value={selectedGsc}
+                              onChange={(e) => setSelectedGsc(e.target.value)}
+                            >
+                              <option value="">-- Auto-detect per project --</option>
+                              {gscSites.map((site) => (
+                                <option key={site.siteUrl} value={site.siteUrl}>
+                                  {site.siteUrl}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className={styles.fieldGroup}>
+                            <label className={styles.fieldLabel}>
+                              Default Analytics Property (fallback)
+                            </label>
+                            <select
+                              className={styles.select}
+                              value={selectedGa}
+                              onChange={(e) => setSelectedGa(e.target.value)}
+                            >
+                              <option value="">-- Auto-detect per project --</option>
+                              {gaProperties.map((prop) => (
+                                <option
+                                  key={prop.propertyId}
+                                  value={prop.propertyId}
+                                >
+                                  {prop.displayName} ({prop.propertyId})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            className={styles.saveBtn}
+                            onClick={handleSaveProperties}
+                            disabled={saving}
+                          >
+                            {saving ? 'Saving...' : 'Save Override'}
+                          </button>
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Show which sites the user has */}
+                    {!loadingProperties && gscSites.length > 0 && (
+                      <div style={{ marginTop: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase' }}>
+                          Your Search Console sites ({gscSites.length})
+                        </div>
+                        <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 13 }}>
+                          {gscSites.slice(0, 5).map((site) => (
+                            <li key={site.siteUrl} style={{ padding: '4px 0', color: 'var(--text-secondary)' }}>
+                              • {site.siteUrl}
+                            </li>
+                          ))}
+                          {gscSites.length > 5 && (
+                            <li style={{ padding: '4px 0', color: 'var(--text-tertiary)' }}>
+                              ...and {gscSites.length - 5} more
+                            </li>
+                          )}
+                        </ul>
+                      </div>
                     )}
                   </div>
 

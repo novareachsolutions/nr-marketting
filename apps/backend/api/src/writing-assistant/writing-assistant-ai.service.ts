@@ -1,7 +1,7 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { callOpenAIJson } from '../common/utils/openai';
 
 @Injectable()
 export class WritingAssistantAiService {
@@ -13,7 +13,7 @@ export class WritingAssistantAiService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
   }
 
@@ -153,7 +153,7 @@ export class WritingAssistantAiService {
 
   private ensureOpenAI() {
     if (!this.hasOpenAI) {
-      throw new BadRequestException('OpenAI API key is not configured');
+      throw new BadRequestException('Anthropic API key is not configured');
     }
   }
 
@@ -163,31 +163,16 @@ export class WritingAssistantAiService {
     maxTokens: number,
   ): Promise<Record<string, any>> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o',
-          temperature: 0.5,
-          max_tokens: maxTokens,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      return JSON.parse(content);
+      return await callOpenAIJson<Record<string, any>>({
+        apiKey: this.openaiKey,
+        systemPrompt,
+        userPrompt,
+        maxTokens,
+        temperature: 0.5,
+        timeout: 30000,
+      });
     } catch (err: any) {
-      this.logger.error(`OpenAI error: ${err?.message}`);
+      this.logger.error(`Anthropic error: ${err?.message}`);
       throw new BadRequestException('AI request failed. Please try again.');
     }
   }

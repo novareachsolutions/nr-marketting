@@ -40,3 +40,7 @@ yarn-error.log*
 
 # Prisma
 prisma/migrations
+
+# Google OAuth client secrets — never commit
+client_secret_*.json
+*.apps.googleusercontent.com.json

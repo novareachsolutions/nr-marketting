@@ -41,6 +41,7 @@ export class PositionTrackingController {
   @Get('projects/:id/position-tracking/keywords')
   @UseGuards(ProjectOwnerGuard)
   async getTrackedKeywords(
+    @CurrentUser('id') userId: string,
     @Param('id') projectId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('perPage', new DefaultValuePipe(50), ParseIntPipe) perPage: number,
@@ -68,6 +69,7 @@ export class PositionTrackingController {
       page,
       perPage,
       Object.keys(filters).length > 0 ? filters : undefined,
+      userId,
     );
     return { success: true, data };
   }
@@ -254,8 +256,28 @@ export class PositionTrackingController {
   @Post('projects/:id/position-tracking/check-now')
   @UseGuards(ProjectOwnerGuard)
   @HttpCode(HttpStatus.OK)
-  async checkNow(@Param('id') projectId: string) {
-    const data = await this.rankCheckerService.checkPositions(projectId);
+  async checkNow(
+    @Param('id') projectId: string,
+    @Body() body: { country?: string },
+  ) {
+    const data = await this.rankCheckerService.checkPositions(
+      projectId,
+      body?.country,
+    );
+    return { success: true, data };
+  }
+
+  @Post('projects/:id/position-tracking/keywords/:keywordId/check-now')
+  @UseGuards(ProjectOwnerGuard)
+  @HttpCode(HttpStatus.OK)
+  async checkSingleKeywordNow(
+    @Param('id') projectId: string,
+    @Param('keywordId') keywordId: string,
+  ) {
+    const data = await this.rankCheckerService.checkSingleKeywordPosition(
+      projectId,
+      keywordId,
+    );
     return { success: true, data };
   }
 

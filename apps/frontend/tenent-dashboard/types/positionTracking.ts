@@ -1,6 +1,13 @@
 export type Device = 'DESKTOP' | 'MOBILE';
 export type ChangeType = 'improved' | 'declined' | 'new' | 'lost' | 'unchanged';
 
+export interface GscKeywordMetrics {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
 export interface TrackedKeywordWithPosition {
   id: string;
   keyword: string;
@@ -16,6 +23,8 @@ export interface TrackedKeywordWithPosition {
   changeType: ChangeType;
   rankingUrl: string | null;
   serpFeatures: string | null;
+  // Real GSC metrics — populated only when the user has Search Console connected
+  gsc: GscKeywordMetrics | null;
   tags: KeywordTag[];
 }
 
@@ -77,6 +86,7 @@ export interface TrackedKeywordsResponse {
   page: number;
   perPage: number;
   totalPages: number;
+  gscConnected: boolean;
 }
 
 export interface TrackedKeywordsFilters {

@@ -6,10 +6,10 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { WordPressService } from '../wordpress/wordpress.service';
 import { GitHubService } from '../github/github.service';
+import { callOpenAIJson, callOpenAIText } from '../common/utils/openai';
 
 interface FixResult {
   fixed: boolean;
@@ -348,7 +348,7 @@ export class AutoFixService {
   }
 
   /**
-   * Generate a fix using OpenAI GPT-4o-mini.
+   * Generate a fix using Claude.
    */
   async generateFixWithAI(
     issueType: string,
@@ -362,50 +362,26 @@ export class AutoFixService {
     },
   ): Promise<AiFixResult> {
     const prompt = this.buildFixPrompt(issueType, pageData);
-
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are an SEO expert. Fix the following issue on this web page. Return ONLY valid JSON with the fix, no explanation. The JSON should have the relevant fields: "title", "metaDescription", "h1", "content", "altText" (include only the fields that need to change).',
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      },
-    );
-
-    const aiContent = response.data.choices?.[0]?.message?.content ?? '{}';
+    const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
 
     try {
-      // Strip markdown code fences if present
-      const cleaned = aiContent
-        .replace(/^```json?\s*/i, '')
-        .replace(/\s*```$/i, '')
-        .trim();
-      return JSON.parse(cleaned);
-    } catch {
-      this.logger.warn(`Failed to parse AI response: ${aiContent}`);
+      return await callOpenAIJson<AiFixResult>({
+        apiKey,
+        systemPrompt:
+          'You are an SEO expert. Fix the following issue on this web page. Return ONLY valid JSON with the fix, no explanation. The JSON should have the relevant fields: "title", "metaDescription", "h1", "content", "altText" (include only the fields that need to change).',
+        userPrompt: prompt,
+        temperature: 0.3,
+        maxTokens: 2000,
+        timeout: 30000,
+      });
+    } catch (err: any) {
+      this.logger.warn(`Failed to generate AI fix: ${err?.message ?? err}`);
       return {};
     }
   }
 
   /**
-   * Generate a fixed version of an entire file using OpenAI.
+   * Generate a fixed version of an entire file using Claude.
    */
   private async generateFileFixWithAI(
     issueType: string,
@@ -419,53 +395,46 @@ export class AutoFixService {
       wordCount: number;
     },
   ): Promise<string> {
-    const response = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              'You are an SEO expert. Fix the following SEO issue in this source file. Return ONLY the complete fixed file content, no explanation or code fences.',
-              'For MISSING_CANONICAL: Add <link rel="canonical" href="..."> in the <head> section.',
-              'For MISSING_STRUCTURED_DATA: Add a <script type="application/ld+json"> block with appropriate JSON-LD schema in the <head>.',
-              'For MISSING_OG_IMAGE: Add <meta property="og:image" content="..."> in the <head>. Use "/og-image.png" as a default if no image URL is evident.',
-              'For NO_DIRECT_ANSWERS: Add concise 40-60 word answer paragraphs right after question-phrased headings.',
-              'For WEAK_EEAT_SIGNALS: Add a section with testimonials, credentials, experience, or trust signals.',
-              'Only modify what is necessary to fix the issue. Preserve all existing code.',
-            ].join(' '),
-          },
-          {
-            role: 'user',
-            content: [
-              `SEO Issue: ${issueType} - ${issueMessage}`,
-              `Page URL: ${pageData.url}`,
-              `Current title: ${pageData.title || '(none)'}`,
-              `Current meta description: ${pageData.metaDescription || '(none)'}`,
-              `Current H1: ${pageData.h1 || '(none)'}`,
-              ``,
-              `File content:`,
-              '```',
-              fileContent,
-              '```',
-              ``,
-              `Return the complete fixed file. Only modify what is necessary to fix the SEO issue.`,
-            ].join('\n'),
-          },
-        ],
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        timeout: 60000,
-      },
-    );
+    const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
+    const systemPrompt = [
+      'You are an SEO expert. Fix the following SEO issue in this source file. Return ONLY the complete fixed file content, no explanation or code fences.',
+      'For MISSING_CANONICAL: Add <link rel="canonical" href="..."> in the <head> section.',
+      'For MISSING_STRUCTURED_DATA: Add a <script type="application/ld+json"> block with appropriate JSON-LD schema in the <head>.',
+      'For MISSING_OG_IMAGE: Add <meta property="og:image" content="..."> in the <head>. Use "/og-image.png" as a default if no image URL is evident.',
+      'For NO_DIRECT_ANSWERS: Add concise 40-60 word answer paragraphs right after question-phrased headings.',
+      'For WEAK_EEAT_SIGNALS: Add a section with testimonials, credentials, experience, or trust signals.',
+      'Only modify what is necessary to fix the issue. Preserve all existing code.',
+    ].join(' ');
 
-    const content = response.data.choices?.[0]?.message?.content ?? fileContent;
+    const userPrompt = [
+      `SEO Issue: ${issueType} - ${issueMessage}`,
+      `Page URL: ${pageData.url}`,
+      `Current title: ${pageData.title || '(none)'}`,
+      `Current meta description: ${pageData.metaDescription || '(none)'}`,
+      `Current H1: ${pageData.h1 || '(none)'}`,
+      ``,
+      `File content:`,
+      '```',
+      fileContent,
+      '```',
+      ``,
+      `Return the complete fixed file. Only modify what is necessary to fix the SEO issue.`,
+    ].join('\n');
+
+    let content: string;
+    try {
+      content = await callOpenAIText({
+        apiKey,
+        systemPrompt,
+        userPrompt,
+        temperature: 0.3,
+        maxTokens: 8000,
+        timeout: 60000,
+      });
+    } catch (err: any) {
+      this.logger.warn(`Failed to generate file fix: ${err?.message ?? err}`);
+      return fileContent;
+    }
 
     // Strip code fences if present
     return content

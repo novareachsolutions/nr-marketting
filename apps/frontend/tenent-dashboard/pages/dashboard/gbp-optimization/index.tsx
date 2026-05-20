@@ -4,6 +4,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
+import { LocalPackSection } from '@/components/gbp-optimization/LocalPackSection';
 import {
   useGbpStatus,
   useGbpLocations,
@@ -448,6 +449,14 @@ function GbpDashboardContent() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* Local Pack Ranking — SerpAPI-powered */}
+          {activeLocation && (
+            <LocalPackSection
+              locationId={activeLocation.id}
+              locationName={activeLocation.name}
+            />
           )}
         </main>
       </div>

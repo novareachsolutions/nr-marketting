@@ -6,6 +6,7 @@ import { GbpInsightsService } from './gbp-insights.service';
 import { GbpReviewsService } from './gbp-reviews.service';
 import { GbpPostsService } from './gbp-posts.service';
 import { GbpAiService } from './gbp-ai.service';
+import { GbpLocalPackService } from './gbp-local-pack.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { GoogleOAuthModule } from '../google-oauth/google-oauth.module';
 
@@ -19,6 +20,7 @@ import { GoogleOAuthModule } from '../google-oauth/google-oauth.module';
     GbpReviewsService,
     GbpPostsService,
     GbpAiService,
+    GbpLocalPackService,
   ],
   exports: [GbpOptimizationService],
 })

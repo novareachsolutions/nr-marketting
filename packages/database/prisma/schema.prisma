@@ -69,7 +69,7 @@ enum Device {
 
 enum DataSource {
   GSC
-  DATAFORSEO
+  SERPAPI
 }
 
 enum CrawlStatus {
@@ -244,6 +244,9 @@ enum IssueType {
   GA_TRACKING_MISSING
   GTM_TAG_MISSING
   AMP_INVALID
+
+  // Per-page security & content checks
+  SENSITIVE_DATA_EXPOSED
 
   // External-API-dependent (filed when API integration runs)
   POOR_LCP

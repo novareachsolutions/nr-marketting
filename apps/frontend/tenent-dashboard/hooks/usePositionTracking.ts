@@ -134,6 +134,10 @@ export function useTriggerRankCheck() {
   return usePost<any>(['pt-keywords', 'pt-overview']);
 }
 
+export function useTriggerSingleKeywordCheck() {
+  return usePost<any>(['pt-keywords', 'pt-overview', 'pt-keyword-history']);
+}
+
 export function useUpdateRankSchedule() {
   return usePatch<any>(['pt-overview']);
 }

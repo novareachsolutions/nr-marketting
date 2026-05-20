@@ -12,6 +12,7 @@ import type {
   GbpEditSuggestion,
   GbpAiPostDraft,
   GbpPostType,
+  LocalPackRankingResponse,
 } from '@/types/gbp-optimization';
 
 // ─── Connection / Status ────────────────────────────────
@@ -214,6 +215,28 @@ export function useResolveGbpEdit() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['gbp-edits'] });
       qc.invalidateQueries({ queryKey: ['gbp-locations'] });
+    },
+  });
+}
+
+// ─── Local Pack Ranking (SerpAPI) ────────────────────────
+
+/**
+ * Check where this business ranks in the Google local pack for a given keyword.
+ * Costs 1 SerpAPI credit per call.
+ */
+export function useCheckLocalPack() {
+  return useMutation<
+    LocalPackRankingResponse,
+    Error,
+    { locationId: string; keyword: string }
+  >({
+    mutationFn: async ({ locationId, keyword }) => {
+      const res = await apiClient.get(
+        `/gbp/locations/${locationId}/local-pack`,
+        { params: { keyword } },
+      );
+      return res.data.data;
     },
   });
 }

@@ -1,39 +1,24 @@
-.main {
-  padding: 32px 40px;
-  max-width: 1400px;
+.section {
+  margin-top: 32px;
 }
 
-.header {
+.sectionHeader {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
+  align-items: center;
+  margin-bottom: 16px;
   gap: 16px;
   flex-wrap: wrap;
 }
 
-.title {
-  font-size: 24px;
-  font-weight: 700;
+.sectionTitle {
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }
 
-.subtitle {
-  margin: 4px 0 0;
-}
-
-.backLink {
-  font-size: 13px;
-  color: var(--accent-primary);
-  text-decoration: none;
-}
-
-.backLink:hover {
-  text-decoration: underline;
-}
-
-.headerActions {
+.sectionActions {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -288,6 +273,33 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.recheckBtn {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  line-height: 1;
+}
+
+.recheckBtn:hover:not(:disabled) {
+  color: var(--accent-primary);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.recheckBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: recheckSpin 0.9s linear infinite;
+}
+
+@keyframes recheckSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Pagination */
 .pagination {
   display: flex;
@@ -320,17 +332,20 @@
 /* States */
 .loadingState {
   text-align: center;
-  padding: 80px 20px;
+  padding: 60px 20px;
   color: var(--text-secondary);
 }
 
 .emptyState {
   text-align: center;
-  padding: 80px 20px;
+  padding: 60px 20px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-primary);
+  border-radius: var(--radius-lg);
 }
 
-.emptyState h2 {
-  font-size: 20px;
+.emptyState h3 {
+  font-size: 18px;
   color: var(--text-primary);
   margin: 0 0 8px;
 }
@@ -561,11 +576,7 @@
   margin-left: auto;
 }
 
-/* Responsive */
 @media (max-width: 900px) {
-  .main {
-    padding: 24px 16px;
-  }
   .filtersRow {
     flex-direction: column;
   }

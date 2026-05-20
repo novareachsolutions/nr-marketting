@@ -239,6 +239,7 @@ export interface ChecklistItemResult {
   affectedUrls: string[];
   message?: string;
   suggestion?: string;
+  sourceSnippets?: string[];
 }
 
 export interface ChecklistCategorySummary {

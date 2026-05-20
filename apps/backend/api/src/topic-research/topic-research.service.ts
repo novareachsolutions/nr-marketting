@@ -1,7 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { callOpenAIJson } from '../common/utils/openai';
+import {
+  serpApiSearch,
+  serpApiAutocomplete,
+  isSerpApiConfigured,
+} from '../common/utils/serpapi';
 
 type SearchIntent =
   | 'INFORMATIONAL'
@@ -41,9 +46,8 @@ interface TopicFilters {
 @Injectable()
 export class TopicResearchService {
   private readonly logger = new Logger(TopicResearchService.name);
-  private readonly dataForSeoLogin: string;
-  private readonly dataForSeoPassword: string;
-  private readonly isConfigured: boolean;
+  private readonly serpApiKey: string;
+  private readonly hasSerpApi: boolean;
   private readonly openaiKey: string;
   private readonly hasOpenAI: boolean;
 
@@ -51,13 +55,10 @@ export class TopicResearchService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.dataForSeoLogin = this.config.get<string>('DATAFORSEO_LOGIN') || '';
-    this.dataForSeoPassword =
-      this.config.get<string>('DATAFORSEO_PASSWORD') || '';
-    this.isConfigured =
-      this.dataForSeoLogin.length > 0 && this.dataForSeoPassword.length > 0;
+    this.serpApiKey = this.config.get<string>('SERPAPI_KEY') || '';
+    this.hasSerpApi = isSerpApiConfigured(this.serpApiKey);
 
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
   }
 
@@ -72,12 +73,14 @@ export class TopicResearchService {
     const normalized = topic.trim().toLowerCase();
 
     let cards: TopicCard[];
-    if (this.isConfigured) {
-      cards = await this.fetchTopicsFromDataForSeo(normalized, country);
+    if (this.hasSerpApi) {
+      cards = await this.fetchTopicsFromSerpApi(normalized, country, domain);
     } else if (this.hasOpenAI) {
       cards = await this.fetchTopicsFromOpenAI(normalized, country, domain);
     } else {
-      cards = this.getMockTopics(normalized);
+      throw new ServiceUnavailableException(
+        'Topic research requires SERPAPI_KEY or ANTHROPIC_API_KEY',
+      );
     }
 
     // Enrich all cards
@@ -158,8 +161,8 @@ export class TopicResearchService {
     let headlines: string[];
     let questions: string[];
 
-    if (this.isConfigured) {
-      const result = await this.fetchSubtopicsFromDataForSeo(
+    if (this.hasSerpApi) {
+      const result = await this.fetchSubtopicsFromSerpApi(
         normalized,
         country,
         limit * 3,
@@ -177,10 +180,9 @@ export class TopicResearchService {
       headlines = result.headlines;
       questions = result.questions;
     } else {
-      const result = this.getMockSubtopics(normalized);
-      subtopics = result.subtopics;
-      headlines = result.headlines;
-      questions = result.questions;
+      throw new ServiceUnavailableException(
+        'Subtopic research requires SERPAPI_KEY or ANTHROPIC_API_KEY',
+      );
     }
 
     // Enrich
@@ -202,109 +204,220 @@ export class TopicResearchService {
     };
   }
 
-  // ─── DATAFORSEO ─────────────────────────────────────────
+  // ─── SERPAPI ────────────────────────────────────────────
 
-  private getAuthHeader(): string {
-    const credentials = Buffer.from(
-      `${this.dataForSeoLogin}:${this.dataForSeoPassword}`,
-    ).toString('base64');
-    return `Basic ${credentials}`;
+  /**
+   * Collect a keyword pool from SerpAPI (autocomplete + related searches + PAA)
+   * and optionally enrich each with Anthropic-estimated volume/KD/CPC.
+   */
+  private async collectKeywordPool(
+    seed: string,
+    country: string,
+  ): Promise<{ keywords: string[]; questions: string[] }> {
+    const [autocompletions, searchResult] = await Promise.all([
+      serpApiAutocomplete({
+        apiKey: this.serpApiKey,
+        query: seed,
+        country,
+      }).catch((err) => {
+        this.logger.warn(`SerpAPI autocomplete failed: ${err}`);
+        return [] as string[];
+      }),
+      serpApiSearch({
+        apiKey: this.serpApiKey,
+        query: seed,
+        country,
+        num: 100,
+      }).catch((err) => {
+        this.logger.warn(`SerpAPI search failed: ${err}`);
+        return null;
+      }),
+    ]);
+
+    const pool = new Set<string>();
+    for (const kw of autocompletions) pool.add(kw.toLowerCase().trim());
+
+    const questions: string[] = [];
+    if (searchResult) {
+      for (const kw of searchResult.relatedSearches)
+        pool.add(kw.toLowerCase().trim());
+      for (const q of searchResult.relatedQuestions) {
+        questions.push(q);
+        pool.add(q.toLowerCase().trim().replace(/\?$/, ''));
+      }
+    }
+
+    pool.delete(seed.toLowerCase().trim());
+
+    return { keywords: Array.from(pool), questions };
   }
 
-  private async fetchTopicsFromDataForSeo(
+  /**
+   * Estimate metrics for a list of keywords via Anthropic. Returns a map
+   * keyed by normalized keyword (lowercase, trimmed, trailing punctuation stripped).
+   * Processed in small sub-batches so one bad JSON response doesn't wipe metrics
+   * for every keyword.
+   */
+  private async estimateKeywordMetrics(
+    keywords: string[],
+    country: string,
+  ): Promise<Map<string, { searchVolume: number | null; difficulty: number | null; cpc: number | null }>> {
+    const map = new Map<
+      string,
+      { searchVolume: number | null; difficulty: number | null; cpc: number | null }
+    >();
+    if (!this.hasOpenAI || keywords.length === 0) return map;
+
+    const normalize = (s: string) =>
+      s.toLowerCase().trim().replace(/[?,.!]+$/, '');
+    const BATCH_SIZE = 10;
+
+    for (let i = 0; i < keywords.length; i += BATCH_SIZE) {
+      const batch = keywords.slice(i, i + BATCH_SIZE);
+      try {
+        const list = batch.map((k, j) => `${j + 1}. ${k}`).join('\n');
+        const parsed = await callOpenAIJson<any>({
+          apiKey: this.openaiKey,
+          systemPrompt: `You are an SEO data analyst. Estimate realistic monthly search volume (integer), keyword difficulty (0-100), and CPC (USD float) for each keyword.
+
+Return ONLY valid JSON:
+{
+  "results": [
+    { "keyword": "<echo exactly as provided>", "searchVolume": <int>, "difficulty": <0-100>, "cpc": <float> }
+  ]
+}
+
+Rules:
+- Return exactly ${batch.length} results in the same order as the input.
+- Never return null — always give your best estimate.
+- Be realistic. Long-tail = 50-500. Head terms = 10k+.`,
+          userPrompt: `Country: ${country}\n\nKeywords (in order):\n${list}`,
+          temperature: 0.3,
+          maxTokens: 2000,
+          timeout: 30000,
+        });
+
+        const rawResults = Array.isArray(parsed.results) ? parsed.results : [];
+
+        // String-match first, fall back to index for any keyword Anthropic
+        // returned with slightly different casing/punctuation.
+        const byKeyword = new Map<string, any>();
+        for (const r of rawResults) {
+          if (typeof r?.keyword === 'string') {
+            byKeyword.set(normalize(r.keyword), r);
+          }
+        }
+
+        batch.forEach((kw, idx) => {
+          const r = byKeyword.get(normalize(kw)) ?? rawResults[idx];
+          if (!r) return;
+          map.set(normalize(kw), {
+            searchVolume:
+              typeof r.searchVolume === 'number' ? r.searchVolume : null,
+            difficulty:
+              typeof r.difficulty === 'number' ? r.difficulty : null,
+            cpc: typeof r.cpc === 'number' ? r.cpc : null,
+          });
+        });
+      } catch (err) {
+        this.logger.error(
+          `Anthropic sub-batch metric estimation failed (batch ${i / BATCH_SIZE + 1}): ${err}`,
+        );
+      }
+    }
+
+    return map;
+  }
+
+  private async fetchTopicsFromSerpApi(
     topic: string,
     country: string,
+    domain?: string,
   ): Promise<TopicCard[]> {
     try {
-      const response = await axios.post(
-        'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',
-        [
-          {
-            keyword: topic,
-            location_code: this.countryToLocationCode(country),
-            language_code: 'en',
-            limit: 100,
-            include_seed_keyword: false,
-          },
-        ],
-        {
-          headers: {
-            Authorization: this.getAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
+      const { keywords } = await this.collectKeywordPool(topic, country);
 
-      const taskResult = response.data?.tasks?.[0]?.result?.[0];
-      if (!taskResult?.items) {
-        return this.getMockTopics(topic);
+      if (keywords.length === 0) {
+        if (this.hasOpenAI)
+          return this.fetchTopicsFromOpenAI(topic, country, domain);
+        return [];
       }
 
-      // Group suggestions into topic clusters
-      const clusters = this.clusterIntoTopics(taskResult.items, topic);
+      const metricsMap = await this.estimateKeywordMetrics(
+        keywords.slice(0, 60),
+        country,
+      );
+
+      const normKey = (s: string) =>
+        s.toLowerCase().trim().replace(/[?,.!]+$/, '');
+      const items = keywords.map((kw) => ({
+        keyword: kw,
+        keyword_info: {
+          search_volume: metricsMap.get(normKey(kw))?.searchVolume ?? null,
+        },
+        keyword_properties: {
+          keyword_difficulty:
+            metricsMap.get(normKey(kw))?.difficulty ?? null,
+        },
+      }));
+
+      const clusters = this.clusterIntoTopics(items, topic);
       return clusters;
     } catch (err) {
-      this.logger.error(`DataForSEO topic research error: ${err}`);
-      return this.getMockTopics(topic);
+      this.logger.error(`SerpAPI topic research error: ${err}`);
+      if (this.hasOpenAI)
+        return this.fetchTopicsFromOpenAI(topic, country, domain);
+      throw new ServiceUnavailableException('SerpAPI request failed and no fallback configured');
     }
   }
 
-  private async fetchSubtopicsFromDataForSeo(
+  private async fetchSubtopicsFromSerpApi(
     topic: string,
     country: string,
     limit: number,
   ): Promise<{ subtopics: Subtopic[]; headlines: string[]; questions: string[] }> {
     try {
-      const response = await axios.post(
-        'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',
-        [
-          {
-            keyword: topic,
-            location_code: this.countryToLocationCode(country),
-            language_code: 'en',
-            limit,
-            include_seed_keyword: true,
-          },
-        ],
-        {
-          headers: {
-            Authorization: this.getAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
+      const { keywords, questions: paaQuestions } = await this.collectKeywordPool(
+        topic,
+        country,
       );
 
-      const taskResult = response.data?.tasks?.[0]?.result?.[0];
-      if (!taskResult?.items) {
-        return this.getMockSubtopics(topic);
+      if (keywords.length === 0) {
+        return { subtopics: [], headlines: [], questions: [] };
       }
 
-      const subtopics: Subtopic[] = taskResult.items.map((item: any) => ({
-        keyword: item.keyword,
-        searchVolume: item.keyword_info?.search_volume ?? null,
-        difficulty: item.keyword_properties?.keyword_difficulty
-          ? Math.round(item.keyword_properties.keyword_difficulty)
-          : null,
-        cpc: item.keyword_info?.cpc ?? null,
-        intent: 'INFORMATIONAL' as SearchIntent,
-        topicEfficiency: null,
-        isQuestion: false,
-        wordCount: 0,
-      }));
+      const sliced = keywords.slice(0, limit);
+      const metricsMap = await this.estimateKeywordMetrics(sliced, country);
 
-      const questions = subtopics
+      const normKey = (s: string) =>
+        s.toLowerCase().trim().replace(/[?,.!]+$/, '');
+      const subtopics: Subtopic[] = sliced.map((kw) => {
+        const m = metricsMap.get(normKey(kw));
+        return {
+          keyword: kw,
+          searchVolume: m?.searchVolume ?? null,
+          difficulty: m?.difficulty ?? null,
+          cpc: m?.cpc ?? null,
+          intent: 'INFORMATIONAL' as SearchIntent,
+          topicEfficiency: null,
+          isQuestion: false,
+          wordCount: 0,
+        };
+      });
+
+      const inferredQuestions = subtopics
         .filter((s) => this.isQuestionKeyword(s.keyword))
-        .map((s) => s.keyword)
-        .slice(0, 10);
+        .map((s) => s.keyword);
+      const questions = Array.from(
+        new Set([...paaQuestions, ...inferredQuestions]),
+      ).slice(0, 10);
 
       const headlines = this.generateHeadlines(topic, subtopics);
 
       return { subtopics, headlines, questions };
     } catch (err) {
-      this.logger.error(`DataForSEO subtopics error: ${err}`);
-      return this.getMockSubtopics(topic);
+      this.logger.error(`SerpAPI subtopics error: ${err}`);
+      throw new ServiceUnavailableException('SerpAPI request failed for subtopics');
     }
   }
 
@@ -320,16 +433,9 @@ export class TopicResearchService {
         ? `\nThe content is for the domain: ${domain}`
         : '';
 
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.5,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an SEO topic research expert. Given a seed topic, generate 15-20 related topic clusters that people search for. Each cluster is a broader subtopic related to the seed keyword. Return ONLY valid JSON:
+      const parsed = await callOpenAIJson<any>({
+        apiKey: this.openaiKey,
+        systemPrompt: `You are an SEO topic research expert. Given a seed topic, generate 15-20 related topic clusters that people search for. Each cluster is a broader subtopic related to the seed keyword. Return ONLY valid JSON:
 {
   "topics": [
     {
@@ -342,24 +448,10 @@ export class TopicResearchService {
   ]
 }
 Make topics diverse: include informational, commercial, how-to, comparison, and question-based clusters. Order by estimated search volume descending. Be realistic with metrics.`,
-            },
-            {
-              role: 'user',
-              content: `Seed topic: "${topic}"\nCountry: ${country}${domainContext}\nGenerate 15-20 topic clusters.`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+        userPrompt: `Seed topic: "${topic}"\nCountry: ${country}${domainContext}\nGenerate 15-20 topic clusters.`,
+        temperature: 0.5,
+        timeout: 30000,
+      });
 
       return (parsed.topics || []).map((t: any) => ({
         topic: t.topic,
@@ -370,8 +462,8 @@ Make topics diverse: include informational, commercial, how-to, comparison, and 
         intent: 'INFORMATIONAL' as SearchIntent,
       }));
     } catch (err) {
-      this.logger.error(`OpenAI topic research error: ${err}`);
-      return this.getMockTopics(topic);
+      this.logger.error(`Anthropic topic research error: ${err}`);
+      throw new ServiceUnavailableException('Topic research estimation failed');
     }
   }
 
@@ -381,16 +473,9 @@ Make topics diverse: include informational, commercial, how-to, comparison, and 
     country: string,
   ): Promise<{ subtopics: Subtopic[]; headlines: string[]; questions: string[] }> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.5,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an SEO content research expert. Given a topic and its parent topic, generate related subtopics (keywords), headline ideas, and common questions people ask. Return ONLY valid JSON:
+      const parsed = await callOpenAIJson<any>({
+        apiKey: this.openaiKey,
+        systemPrompt: `You are an SEO content research expert. Given a topic and its parent topic, generate related subtopics (keywords), headline ideas, and common questions people ask. Return ONLY valid JSON:
 {
   "subtopics": [
     {
@@ -405,24 +490,10 @@ Make topics diverse: include informational, commercial, how-to, comparison, and 
   "questions": ["<question 1>", "<question 2>", ...]
 }
 Generate 15-20 subtopics, 8-10 headline ideas, and 8-10 questions. Be realistic with metrics.`,
-            },
-            {
-              role: 'user',
-              content: `Topic: "${topic}"\nParent topic: "${parentTopic}"\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+        userPrompt: `Topic: "${topic}"\nParent topic: "${parentTopic}"\nCountry: ${country}`,
+        temperature: 0.5,
+        timeout: 30000,
+      });
 
       const subtopics: Subtopic[] = (parsed.subtopics || []).map((s: any) => ({
         keyword: s.keyword,
@@ -441,89 +512,12 @@ Generate 15-20 subtopics, 8-10 headline ideas, and 8-10 questions. Be realistic 
         questions: parsed.questions || [],
       };
     } catch (err) {
-      this.logger.error(`OpenAI subtopics error: ${err}`);
-      return this.getMockSubtopics(topic);
+      this.logger.error(`Anthropic subtopics error: ${err}`);
+      throw new ServiceUnavailableException('Subtopic estimation failed');
     }
   }
 
-  // ─── MOCK DATA ──────────────────────────────────────────
-
-  private getMockTopics(topic: string): TopicCard[] {
-    const modifiers = [
-      'best', 'how to', 'top', 'guide', 'tips', 'for beginners',
-      'tools', 'strategies', 'examples', 'trends', 'ideas',
-      'checklist', 'vs', 'benefits', 'mistakes', 'templates',
-    ];
-
-    return modifiers.map((mod) => {
-      const topicName = `${mod} ${topic}`.trim();
-      const h = this.simpleHash(topicName);
-      const volume = 200 + (h % 40000);
-      const difficulty = 5 + (h % 85);
-
-      return {
-        topic: topicName,
-        searchVolume: volume,
-        difficulty,
-        topicEfficiency: null,
-        subtopicCount: 3 + (h % 12),
-        intent: 'INFORMATIONAL' as SearchIntent,
-      };
-    });
-  }
-
-  private getMockSubtopics(topic: string): {
-    subtopics: Subtopic[];
-    headlines: string[];
-    questions: string[];
-  } {
-    const suffixes = [
-      'guide', 'tips', 'examples', 'tools', 'software',
-      'free', 'best practices', 'strategy', 'tutorial', 'course',
-      'for small business', 'templates', 'checklist', 'framework', 'audit',
-    ];
-
-    const subtopics: Subtopic[] = suffixes.map((suf) => {
-      const kw = `${topic} ${suf}`;
-      const h = this.simpleHash(kw);
-      return {
-        keyword: kw,
-        searchVolume: 100 + (h % 25000),
-        difficulty: 5 + (h % 85),
-        cpc: parseFloat((0.1 + (h % 1200) / 100).toFixed(2)),
-        intent: 'INFORMATIONAL' as SearchIntent,
-        topicEfficiency: null,
-        isQuestion: false,
-        wordCount: 0,
-      };
-    });
-
-    const headlines = [
-      `The Ultimate Guide to ${topic}`,
-      `10 ${topic} Tips That Actually Work`,
-      `${topic}: Everything You Need to Know in 2026`,
-      `How to Master ${topic} Step by Step`,
-      `${topic} for Beginners: A Complete Walkthrough`,
-      `Why ${topic} Matters More Than Ever`,
-      `${topic} Best Practices: Expert Insights`,
-      `The Complete ${topic} Checklist`,
-    ];
-
-    const questions = [
-      `What is ${topic}?`,
-      `How does ${topic} work?`,
-      `Why is ${topic} important?`,
-      `How to get started with ${topic}?`,
-      `What are the best ${topic} tools?`,
-      `How much does ${topic} cost?`,
-      `Is ${topic} worth it?`,
-      `What are common ${topic} mistakes?`,
-    ];
-
-    return { subtopics, headlines, questions };
-  }
-
-  // ─── CLUSTERING ─────────────────────────────────────────
+  // ─── CLUSTERING ──────────────────────────────────────
 
   private clusterIntoTopics(items: any[], seedTopic: string): TopicCard[] {
     const stopWords = new Set([
@@ -598,7 +592,7 @@ Generate 15-20 subtopics, 8-10 headline ideas, and 8-10 questions. Be realistic 
       .sort((a, b) => (b.searchVolume ?? 0) - (a.searchVolume ?? 0))
       .slice(0, 20);
 
-    return cards.length > 0 ? cards : this.getMockTopics(seedTopic);
+    return cards;
   }
 
   private generateHeadlines(topic: string, subtopics: Subtopic[]): string[] {
@@ -709,30 +703,4 @@ Generate 15-20 subtopics, 8-10 headline ideas, and 8-10 questions. Be realistic 
     );
   }
 
-  private simpleHash(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return Math.abs(hash);
-  }
-
-  private countryToLocationCode(country: string): number {
-    const map: Record<string, number> = {
-      US: 2840,
-      GB: 2826,
-      CA: 2124,
-      AU: 2036,
-      IN: 2356,
-      DE: 2276,
-      FR: 2250,
-      ES: 2724,
-      IT: 2380,
-      BR: 2076,
-      JP: 2392,
-    };
-    return map[country.toUpperCase()] || 2840;
-  }
 }

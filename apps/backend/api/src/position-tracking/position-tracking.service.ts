@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { GscApiService } from '../google-oauth/gsc-api.service';
 
 // CTR model by position (industry standard estimates)
 const CTR_MODEL: Record<number, number> = {
@@ -29,7 +30,10 @@ function getCtrForPosition(position: number | null): number {
 
 @Injectable()
 export class PositionTrackingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gsc: GscApiService,
+  ) {}
 
   // ─── KEYWORD MANAGEMENT ─────────────────────────────────
 
@@ -115,6 +119,7 @@ export class PositionTrackingService {
       sort?: string;
       order?: string;
     },
+    userId?: string,
   ) {
     const where: any = { projectId, isActive: true };
 
@@ -144,6 +149,23 @@ export class PositionTrackingService {
         : { createdAt: 'desc' },
     });
 
+    // Look up the project's domain so we can match it to the user's GSC properties
+    let projectDomain: string | undefined;
+    if (userId) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { domain: true },
+      });
+      projectDomain = project?.domain;
+    }
+
+    // Look up real GSC metrics for these keywords if the user has GSC connected
+    const gscMap = await this.fetchGscOverlay(
+      userId,
+      projectDomain,
+      trackedKeywords.map((tk) => tk.keyword),
+    );
+
     const keywords = trackedKeywords.map((tk) => {
       const latest = tk.rankingHistory[0] || null;
       const previous = tk.rankingHistory[1] || null;
@@ -163,6 +185,8 @@ export class PositionTrackingService {
         changeType = 'lost';
       }
 
+      const gsc = gscMap.get(tk.keyword.toLowerCase().trim()) || null;
+
       return {
         id: tk.id,
         keyword: tk.keyword,
@@ -178,6 +202,15 @@ export class PositionTrackingService {
         changeType,
         rankingUrl: latest?.rankingUrl ?? null,
         serpFeatures: latest?.serpFeatures ?? null,
+        // Real GSC metrics — populated only when user has GSC connected
+        gsc: gsc
+          ? {
+              clicks: gsc.clicks,
+              impressions: gsc.impressions,
+              ctr: gsc.ctr,
+              position: gsc.position,
+            }
+          : null,
         tags: tk.tags.map((t) => ({
           id: t.tag.id,
           name: t.tag.name,
@@ -223,7 +256,54 @@ export class PositionTrackingService {
       page,
       perPage,
       totalPages: Math.ceil(total / perPage),
+      gscConnected: userId ? await this.gsc.isConnected(userId).catch(() => false) : false,
     };
+  }
+
+  /**
+   * Fetch real GSC metrics for the given keywords. Returns an empty Map
+   * if user isn't connected or the GSC API call fails — we never throw
+   * because GSC overlay is purely additive (the page should still render
+   * if GSC is unavailable).
+   */
+  private async fetchGscOverlay(
+    userId: string | undefined,
+    projectDomain: string | undefined,
+    keywords: string[],
+  ): Promise<Map<string, { clicks: number; impressions: number; ctr: number; position: number }>> {
+    const empty = new Map<
+      string,
+      { clicks: number; impressions: number; ctr: number; position: number }
+    >();
+    if (!userId || keywords.length === 0) return empty;
+
+    try {
+      const connected = await this.gsc.isConnected(userId);
+      if (!connected) return empty;
+
+      const rows = await this.gsc.getKeywordPositions(
+        userId,
+        keywords,
+        28,
+        projectDomain,
+      );
+      const out = new Map<
+        string,
+        { clicks: number; impressions: number; ctr: number; position: number }
+      >();
+      for (const [key, row] of rows) {
+        out.set(key, {
+          clicks: row.clicks,
+          impressions: row.impressions,
+          ctr: row.ctr,
+          position: row.position,
+        });
+      }
+      return out;
+    } catch {
+      // GSC overlay is best-effort. If it fails, just skip the overlay.
+      return empty;
+    }
   }
 
   async updateKeyword(projectId: string, keywordId: string, targetUrl?: string) {

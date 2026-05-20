@@ -135,3 +135,28 @@ export interface GbpAiPostDraft {
   content: string;
   ctaType: string;
 }
+
+// ─── Local Pack Ranking (SerpAPI) ────────────────────────
+
+export interface LocalPackResult {
+  position: number;
+  name: string;
+  address: string;
+  rating: number | null;
+  reviewCount: number | null;
+  phone: string | null;
+  website: string | null;
+  placeId: string | null;
+  type: string | null;
+}
+
+export interface LocalPackRankingResponse {
+  keyword: string;
+  searchLocation: string;
+  myBusinessPosition: number | null;
+  myBusinessName: string;
+  myBusinessFound: boolean;
+  topResults: LocalPackResult[];
+  totalResults: number;
+  checkedAt: string;
+}

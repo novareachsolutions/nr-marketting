@@ -29,6 +29,7 @@ import {
   ClipboardType,
   MapPin,
   FolderKanban,
+  LineChart,
 } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -161,6 +162,7 @@ export function Sidebar({ projectId }: SidebarProps) {
             { href: `/dashboard/projects/${projectId}/domain-overview`, icon: <Globe size={17} />, label: 'Domain Overview', match: `/dashboard/projects/${projectId}/domain-overview` },
             { href: `/dashboard/projects/${projectId}/organic-rankings`, icon: <TrendingUp size={17} />, label: 'Organic Rankings', match: `/dashboard/projects/${projectId}/organic-rankings` },
             { href: `/dashboard/projects/${projectId}/top-pages`, icon: <FileText size={17} />, label: 'Top Pages', match: `/dashboard/projects/${projectId}/top-pages` },
+            { href: `/dashboard/projects/${projectId}/analytics`, icon: <LineChart size={17} />, label: 'Analytics', match: `/dashboard/projects/${projectId}/analytics` },
             { href: `/dashboard/projects/${projectId}/compare-domains`, icon: <BarChart3 size={17} />, label: 'Compare Domains', match: `/dashboard/projects/${projectId}/compare-domains` },
           ],
         },

@@ -20,6 +20,14 @@ export interface ChecklistItemDefinition {
    * indicate this checklist item has FAILED. Empty array = item not yet implemented in crawler.
    */
   matchingIssueTypes: string[];
+  /**
+   * IDs of other checklist items that must be passing for this check to be meaningful.
+   * If ANY dependency is not Pass (Error / Warning / Notice / Skipped), this item is
+   * automatically reported as Skipped — there is nothing meaningful to evaluate.
+   * Example: item #2 ("robots.txt has no syntax errors") depends on item #1
+   * ("robots.txt is present"); if #1 fails, #2 must not silently report Pass.
+   */
+  dependsOnItems?: number[];
   /** Free-form notes shown in the UI (e.g., "Needs PageSpeed Insights API"). */
   note?: string;
 }
@@ -44,6 +52,11 @@ export interface ChecklistItemResult {
   message?: string;
   /** Suggestion text from the matching CrawlIssue. */
   suggestion?: string;
+  /**
+   * Up to 5 distinct "source" snippets — the actual offending HTML, line, URL,
+   * or response header that caused the failure. Empty for Pass / Skipped items.
+   */
+  sourceSnippets?: string[];
 }
 
 export interface ChecklistReport {

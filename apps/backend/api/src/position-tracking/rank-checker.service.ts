@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -6,6 +12,11 @@ import {
   callOpenAIJsonWithSearch,
   isWebSearchEnabled,
 } from '../common/utils/openai';
+import {
+  serpApiSearch,
+  isSerpApiConfigured,
+  findDomainPosition,
+} from '../common/utils/serpapi';
 
 interface PositionResult {
   keyword: string;
@@ -14,33 +25,11 @@ interface PositionResult {
   serpFeatures: string[];
 }
 
-// Simple hash for deterministic mock data
-function simpleHash(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-const SERP_FEATURE_LIST = [
-  'featured_snippet',
-  'people_also_ask',
-  'sitelinks',
-  'local_pack',
-  'knowledge_graph',
-  'video',
-  'image_pack',
-  'top_stories',
-  'shopping',
-  'reviews',
-];
-
 @Injectable()
 export class RankCheckerService {
   private readonly logger = new Logger(RankCheckerService.name);
+  private readonly serpApiKey: string;
+  private readonly hasSerpApi: boolean;
   private readonly openaiKey: string;
   private readonly hasOpenAI: boolean;
 
@@ -48,34 +37,39 @@ export class RankCheckerService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.serpApiKey = this.config.get<string>('SERPAPI_KEY') || '';
+    this.hasSerpApi = isSerpApiConfigured(this.serpApiKey);
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
 
-    if (this.hasOpenAI) {
-      this.logger.log('Position Tracking: Using OpenAI for rank estimation');
+    if (this.hasSerpApi) {
+      this.logger.log('Position Tracking: Using SerpAPI for real Google rank checks');
+    } else if (this.hasOpenAI) {
+      this.logger.log('Position Tracking: SerpAPI not configured — falling back to Anthropic estimation');
     } else {
-      this.logger.warn('Position Tracking: OpenAI not configured — using mock data');
+      this.logger.error('Position Tracking: Neither SerpAPI nor Anthropic configured — rank checks will throw 503');
     }
   }
 
   /**
-   * Check positions for all active tracked keywords in a project
+   * Check positions for all active tracked keywords in a project.
+   * If `country` is provided, all active keywords are first updated to that
+   * country (e.g. "AU"), then checked on the correct Google domain.
    */
-  async checkPositions(projectId: string) {
+  async checkPositions(projectId: string, country?: string) {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
       select: { domain: true, lastRankCheckAt: true },
     });
     if (!project) throw new BadRequestException('Project not found');
 
-    // Rate limit: 1 manual check per hour
-    if (project.lastRankCheckAt) {
-      const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      if (project.lastRankCheckAt > hourAgo) {
-        throw new BadRequestException(
-          'Position check already ran within the last hour. Please wait before checking again.',
-        );
-      }
+    // Apply the selected country to all active keywords before checking
+    const normalizedCountry = country?.trim().toUpperCase();
+    if (normalizedCountry) {
+      await this.prisma.trackedKeyword.updateMany({
+        where: { projectId, isActive: true },
+        data: { country: normalizedCountry },
+      });
     }
 
     const trackedKeywords = await this.prisma.trackedKeyword.findMany({
@@ -84,6 +78,12 @@ export class RankCheckerService {
 
     if (trackedKeywords.length === 0) {
       return { jobStarted: false, message: 'No tracked keywords found', keywordCount: 0 };
+    }
+
+    if (!this.hasSerpApi && !this.hasOpenAI) {
+      throw new ServiceUnavailableException(
+        'Rank checks require SERPAPI_KEY or ANTHROPIC_API_KEY',
+      );
     }
 
     // Start background check
@@ -100,7 +100,87 @@ export class RankCheckerService {
       data: { lastRankCheckAt: new Date() },
     });
 
-    return { jobStarted: true, keywordCount };
+    return { jobStarted: true, keywordCount, country: normalizedCountry || null };
+  }
+
+  /**
+   * Check a single tracked keyword on demand. Runs synchronously and returns
+   * the resolved position so the UI can update the row immediately.
+   * Skips the project-level hourly rate limit since this is an explicit
+   * per-keyword action.
+   */
+  async checkSingleKeywordPosition(projectId: string, keywordId: string) {
+    if (!this.hasSerpApi && !this.hasOpenAI) {
+      throw new ServiceUnavailableException(
+        'Rank checks require SERPAPI_KEY or ANTHROPIC_API_KEY',
+      );
+    }
+
+    const tk = await this.prisma.trackedKeyword.findFirst({
+      where: { id: keywordId, projectId },
+    });
+    if (!tk) {
+      throw new NotFoundException('Tracked keyword not found in this project');
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { domain: true },
+    });
+    if (!project) throw new BadRequestException('Project not found');
+
+    this.logger.log(
+      `Single rank check for "${tk.keyword}" on ${project.domain} (${tk.country}/${tk.device})`,
+    );
+
+    const results: PositionResult[] = this.hasSerpApi
+      ? await this.fetchFromSerpApi([tk.keyword], project.domain, tk.country, tk.device)
+      : await this.fetchFromOpenAI([tk.keyword], project.domain, tk.country, tk.device);
+
+    const result = results[0];
+    if (!result) {
+      throw new ServiceUnavailableException(
+        'Rank check failed — provider returned no result',
+      );
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const saved = await this.prisma.rankingHistory.upsert({
+      where: {
+        trackedKeywordId_date_source: {
+          trackedKeywordId: tk.id,
+          date: today,
+          source: 'SERPAPI',
+        },
+      },
+      update: {
+        position: result.position,
+        rankingUrl: result.rankingUrl,
+        serpFeatures: result.serpFeatures.join(','),
+      },
+      create: {
+        trackedKeywordId: tk.id,
+        position: result.position,
+        rankingUrl: result.rankingUrl,
+        serpFeatures: result.serpFeatures.join(','),
+        date: today,
+        source: 'SERPAPI',
+      },
+    });
+
+    return {
+      keywordId: tk.id,
+      keyword: tk.keyword,
+      country: tk.country,
+      device: tk.device,
+      position: saved.position,
+      rankingUrl: saved.rankingUrl,
+      serpFeatures: result.serpFeatures,
+      date: saved.date,
+      source: saved.source,
+    };
   }
 
   /**
@@ -132,10 +212,10 @@ export class RankCheckerService {
 
       let results: PositionResult[];
 
-      if (this.hasOpenAI) {
-        results = await this.fetchFromOpenAI(keywordTexts, domain, country, device);
+      if (this.hasSerpApi) {
+        results = await this.fetchFromSerpApi(keywordTexts, domain, country, device);
       } else {
-        results = this.getMockPositionData(keywordTexts, domain);
+        results = await this.fetchFromOpenAI(keywordTexts, domain, country, device);
       }
 
       // Save results to RankingHistory
@@ -148,7 +228,7 @@ export class RankCheckerService {
             trackedKeywordId_date_source: {
               trackedKeywordId: tk.id,
               date: today,
-              source: 'DATAFORSEO',
+              source: 'SERPAPI',
             },
           },
           update: {
@@ -162,13 +242,58 @@ export class RankCheckerService {
             rankingUrl: result.rankingUrl,
             serpFeatures: result.serpFeatures.join(','),
             date: today,
-            source: 'DATAFORSEO',
+            source: 'SERPAPI',
           },
         });
       }
     }
 
     this.logger.log(`Rank check completed for ${domain}`);
+  }
+
+  // ─── SERPAPI REAL RANK CHECK ────────────────────────────
+
+  /**
+   * Fetch real Google SERP positions via SerpAPI. One request per keyword,
+   * serially, to respect the rate limit. Keywords that fail are skipped
+   * (no row written) — they will be retried on the next check.
+   */
+  private async fetchFromSerpApi(
+    keywords: string[],
+    domain: string,
+    country: string,
+    device: string,
+  ): Promise<PositionResult[]> {
+    const results: PositionResult[] = [];
+
+    for (const keyword of keywords) {
+      try {
+        const searchResult = await serpApiSearch({
+          apiKey: this.serpApiKey,
+          query: keyword,
+          country,
+          device: device as 'desktop' | 'mobile' | 'tablet',
+          num: 100,
+        });
+
+        const { position, rankingUrl } = findDomainPosition(
+          searchResult.organicResults,
+          domain,
+        );
+
+        results.push({
+          keyword,
+          position,
+          rankingUrl,
+          serpFeatures: searchResult.serpFeatures,
+        });
+      } catch (err) {
+        this.logger.error(`SerpAPI rank check failed for "${keyword}": ${err}`);
+        // Skip this keyword — no row written; will be retried next check
+      }
+    }
+
+    return results;
   }
 
   // ─── OPENAI POSITION ESTIMATION ─────────────────────────
@@ -190,8 +315,7 @@ export class RankCheckerService {
         allResults.push(...results);
       } catch (err) {
         this.logger.error(`OpenAI batch ${i / batchSize + 1} failed: ${err}`);
-        // Fallback to mock for this batch
-        allResults.push(...this.getMockPositionData(batch, domain));
+        // Skip this batch — no rows written; will be retried next check
       }
     }
 
@@ -266,34 +390,4 @@ Return ONLY valid JSON with this structure:
     }));
   }
 
-  // ─── MOCK POSITION DATA ─────────────────────────────────
-
-  private getMockPositionData(keywords: string[], domain: string): PositionResult[] {
-    return keywords.map((keyword) => {
-      const h = simpleHash(keyword + domain);
-
-      // 70% chance of ranking
-      const isRanking = h % 10 < 7;
-      const position = isRanking ? (h % 95) + 1 : null;
-
-      // Generate ranking URL
-      const slug = keyword.replace(/\s+/g, '-').toLowerCase().slice(0, 30);
-      const paths = ['/blog/', '/services/', '/pages/', '/'];
-      const rankingUrl = isRanking
-        ? `https://${domain}${paths[h % paths.length]}${slug}`
-        : null;
-
-      // Random SERP features (1-3 features per keyword)
-      const featureCount = (h % 3) + 1;
-      const serpFeatures: string[] = [];
-      for (let i = 0; i < featureCount; i++) {
-        const idx = (h + i * 7) % SERP_FEATURE_LIST.length;
-        if (!serpFeatures.includes(SERP_FEATURE_LIST[idx])) {
-          serpFeatures.push(SERP_FEATURE_LIST[idx]);
-        }
-      }
-
-      return { keyword, position, rankingUrl, serpFeatures };
-    });
-  }
 }

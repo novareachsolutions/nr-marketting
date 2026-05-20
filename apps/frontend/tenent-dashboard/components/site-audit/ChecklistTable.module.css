@@ -354,6 +354,35 @@
   word-break: break-all;
 }
 
+.snippetList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.snippetBlock {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm, 6px);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  line-height: 1.45;
+  max-height: 220px;
+}
+
+.snippetBlock code {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}
+
 .expandToggleBtn {
   background: transparent;
   border: none;

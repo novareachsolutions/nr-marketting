@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  callOpenAIJson,
   callOpenAIJsonWithSearch,
   isWebSearchEnabled,
 } from '../common/utils/openai';
@@ -17,7 +18,7 @@ export class AiSuggestionsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
   }
 
@@ -26,7 +27,7 @@ export class AiSuggestionsService {
     context: Record<string, any>,
   ): Promise<{ suggestions: string[] }> {
     if (!this.hasOpenAI) {
-      throw new BadRequestException('OpenAI API key is not configured');
+      throw new BadRequestException('Anthropic API key is not configured');
     }
 
     // Build cache key from module + stringified context
@@ -62,7 +63,6 @@ export class AiSuggestionsService {
 
     const systemPrompt = this.getSystemPrompt(module);
     const userPrompt = this.getUserPrompt(module, context);
-    const model = (module === 'suggest-competitors' || module === 'topic-research') ? 'gpt-4o' : 'gpt-4o-mini';
 
     try {
       let parsed: any;
@@ -77,34 +77,18 @@ export class AiSuggestionsService {
           systemPrompt: searchSystem,
           userPrompt,
           country: context.country,
-          model: 'gpt-4o',
           temperature: 0.4,
           maxTokens: 1500,
         });
       } else {
-        const response = await axios.post(
-          'https://api.openai.com/v1/chat/completions',
-          {
-            model,
-            temperature: 0.5,
-            max_tokens: 1000,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${this.openaiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 30000,
-          },
-        );
-
-        const content = response.data.choices?.[0]?.message?.content;
-        parsed = JSON.parse(content);
+        parsed = await callOpenAIJson<any>({
+          apiKey: this.openaiKey,
+          systemPrompt,
+          userPrompt,
+          temperature: 0.5,
+          maxTokens: 1000,
+          timeout: 30000,
+        });
       }
 
       const suggestions = Array.isArray(parsed.suggestions)

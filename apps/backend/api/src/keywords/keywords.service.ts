@@ -3,10 +3,16 @@ import {
   Logger,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
+import { callOpenAIJson } from '../common/utils/openai';
+import {
+  serpApiSearch,
+  serpApiAutocomplete,
+  isSerpApiConfigured,
+} from '../common/utils/serpapi';
 
 type SearchIntent = 'INFORMATIONAL' | 'NAVIGATIONAL' | 'COMMERCIAL' | 'TRANSACTIONAL';
 
@@ -39,9 +45,8 @@ interface KeywordSuggestion {
 @Injectable()
 export class KeywordsService {
   private readonly logger = new Logger(KeywordsService.name);
-  private readonly dataForSeoLogin: string;
-  private readonly dataForSeoPassword: string;
-  private readonly isConfigured: boolean;
+  private readonly serpApiKey: string;
+  private readonly hasSerpApi: boolean;
   private readonly openaiKey: string;
   private readonly hasOpenAI: boolean;
 
@@ -49,22 +54,27 @@ export class KeywordsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
-    this.dataForSeoLogin = this.config.get<string>('DATAFORSEO_LOGIN') || '';
-    this.dataForSeoPassword =
-      this.config.get<string>('DATAFORSEO_PASSWORD') || '';
-    this.isConfigured =
-      this.dataForSeoLogin.length > 0 && this.dataForSeoPassword.length > 0;
+    this.serpApiKey = this.config.get<string>('SERPAPI_KEY') || '';
+    this.hasSerpApi = isSerpApiConfigured(this.serpApiKey);
 
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
     this.hasOpenAI = this.openaiKey.length > 0;
 
-    if (!this.isConfigured && this.hasOpenAI) {
+    if (this.hasSerpApi && this.hasOpenAI) {
       this.logger.log(
-        'DataForSEO not configured — using OpenAI for keyword estimates',
+        'Keywords: Using SerpAPI for discovery + Anthropic for metric estimation',
       );
-    } else if (!this.isConfigured) {
+    } else if (this.hasSerpApi) {
+      this.logger.log(
+        'Keywords: Using SerpAPI for discovery — metrics will be null (Anthropic not configured)',
+      );
+    } else if (this.hasOpenAI) {
       this.logger.warn(
-        'DataForSEO + OpenAI not configured — using hardcoded mock data',
+        'Keywords: SerpAPI not configured — using Anthropic-only estimates',
+      );
+    } else {
+      this.logger.error(
+        'Keywords: Neither SerpAPI nor Anthropic configured — endpoints will throw 503',
       );
     }
   }
@@ -101,15 +111,13 @@ export class KeywordsService {
       });
     }
 
-    // Fetch from DataForSEO, OpenAI, or mock
-    let data: KeywordData;
-    if (this.isConfigured) {
-      data = await this.fetchFromDataForSeo(normalized, country);
-    } else if (this.hasOpenAI) {
-      data = await this.fetchFromOpenAI(normalized, country);
-    } else {
-      data = this.getMockKeywordData(normalized, country);
+    // SerpAPI has no volume/CPC/KD, so single-keyword lookup always needs Anthropic.
+    if (!this.hasOpenAI) {
+      throw new ServiceUnavailableException(
+        'Keyword search requires ANTHROPIC_API_KEY to estimate volume/CPC/KD',
+      );
     }
+    let data: KeywordData = await this.fetchFromOpenAI(normalized, country);
 
     // Enrich with intent + priority
     data = this.enrichKeywordData(data);
@@ -160,12 +168,14 @@ export class KeywordsService {
     const normalized = keyword.trim().toLowerCase();
 
     let result: { keywords: KeywordSuggestion[]; total: number };
-    if (this.isConfigured) {
-      result = await this.fetchSuggestionsFromDataForSeo(normalized, country, limit * 3, 1); // fetch more for filtering
+    if (this.hasSerpApi) {
+      result = await this.fetchSuggestionsFromSerpApi(normalized, country, limit * 3);
     } else if (this.hasOpenAI) {
       result = await this.fetchSuggestionsFromOpenAI(normalized, country, limit * 2);
     } else {
-      result = this.getMockSuggestions(normalized, limit * 3, 1);
+      throw new ServiceUnavailableException(
+        'Keyword suggestions require SERPAPI_KEY or ANTHROPIC_API_KEY',
+      );
     }
 
     // Enrich all results
@@ -238,8 +248,37 @@ export class KeywordsService {
       this.prisma.projectKeyword.count({ where: { projectId } }),
     ]);
 
+    // Bulk-fetch cached metrics in one query (any country — prefer most recent)
+    const cacheRows = await this.prisma.keywordCache.findMany({
+      where: { keyword: { in: keywords.map((k) => k.keyword) } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const cacheByKeyword = new Map<string, (typeof cacheRows)[number]>();
+    for (const c of cacheRows) {
+      if (!cacheByKeyword.has(c.keyword)) cacheByKeyword.set(c.keyword, c);
+    }
+
+    const enrichedKeywords = keywords.map((kw) => {
+      const cached = cacheByKeyword.get(kw.keyword);
+      const intent = this.classifyIntent(kw.keyword);
+      const difficulty = cached?.difficulty ?? null;
+      const searchVolume = cached?.searchVolume ?? null;
+      const cpc = cached?.cpc ?? null;
+      return {
+        ...kw,
+        searchVolume,
+        difficulty,
+        cpc,
+        competition: this.difficultyToCompetition(difficulty),
+        intent,
+        isQuestion: this.isQuestionKeyword(kw.keyword),
+        wordCount: this.getWordCount(kw.keyword),
+        priorityScore: this.calculatePriorityScore(searchVolume, difficulty, intent),
+      };
+    });
+
     return {
-      keywords,
+      keywords: enrichedKeywords,
       total,
       page,
       perPage,
@@ -308,11 +347,10 @@ export class KeywordsService {
     const yourKeywords = new Set(projectKeywords.map((k) => k.keyword.toLowerCase()));
 
     // For each competitor, get suggestions based on their domain name
-    // Since we don't have SERP API, we approximate by getting suggestions for
-    // the competitor's core terms
-    const competitorKeywords: Record<string, Set<string>> = {};
+    const competitorKeywords: Record<string, Map<string, KeywordSuggestion>> = {};
 
     for (const domain of competitorDomains.slice(0, 4)) {
+      competitorKeywords[domain] = new Map();
       // Extract meaningful words from domain (e.g., "example-seo-tools.com" → "seo tools")
       const domainWords = domain.replace(/\.(com|org|net|io|co|au|uk)$/i, '')
         .replace(/^www\./, '')
@@ -321,44 +359,39 @@ export class KeywordsService {
 
       // Get suggestions for the domain's core terms
       let result: { keywords: KeywordSuggestion[]; total: number };
-      if (this.isConfigured) {
-        result = await this.fetchSuggestionsFromDataForSeo(domainWords, 'US', 100, 1);
+      if (this.hasSerpApi) {
+        result = await this.fetchSuggestionsFromSerpApi(domainWords, 'US', 100);
       } else if (this.hasOpenAI) {
         result = await this.fetchSuggestionsFromOpenAI(domainWords, 'US', 50);
       } else {
-        result = this.getMockSuggestions(domainWords, 100, 1);
+        throw new ServiceUnavailableException(
+          'Keyword gap analysis requires SERPAPI_KEY or ANTHROPIC_API_KEY',
+        );
       }
 
-      competitorKeywords[domain] = new Set(
-        result.keywords.map((k) => this.enrichSuggestion(k).keyword.toLowerCase()),
-      );
+      // Preserve enriched suggestion data (metrics from SerpAPI+Anthropic) keyed by lowercased keyword
+      for (const k of result.keywords) {
+        const enriched = this.enrichSuggestion(k);
+        competitorKeywords[domain].set(enriched.keyword.toLowerCase(), enriched);
+      }
     }
 
-    // Compute gap categories
-    const allCompetitorKws = new Set<string>();
-    for (const kwSet of Object.values(competitorKeywords)) {
-      for (const kw of kwSet) allCompetitorKws.add(kw);
+    // Compute gap categories — keep best-known metrics per keyword across all competitors
+    const allCompetitorKws = new Map<string, KeywordSuggestion>();
+    for (const kwMap of Object.values(competitorKeywords)) {
+      for (const [kw, sug] of kwMap) {
+        if (!allCompetitorKws.has(kw)) allCompetitorKws.set(kw, sug);
+      }
     }
 
     const missing: KeywordSuggestion[] = []; // Competitors have, you don't
     const shared: string[] = [];   // Both have
     const unique: string[] = [];   // Only you have
 
-    for (const kw of allCompetitorKws) {
+    for (const [kw, sug] of allCompetitorKws) {
       if (!yourKeywords.has(kw)) {
-        // It's a missing keyword — enrich it with mock data for display
-        const h = this.simpleHash(kw);
-        missing.push(this.enrichSuggestion({
-          keyword: kw,
-          searchVolume: 100 + (h % 30000),
-          difficulty: 5 + (h % 90),
-          cpc: parseFloat((0.1 + (h % 1200) / 100).toFixed(2)),
-          competition: this.difficultyToCompetition(5 + (h % 90)),
-          intent: 'INFORMATIONAL',
-          wordCount: 0,
-          isQuestion: false,
-          priorityScore: 0,
-        }));
+        // Real metrics from SerpAPI+Anthropic discovery (or null if Anthropic absent)
+        missing.push(sug);
       } else {
         shared.push(kw);
       }
@@ -436,129 +469,202 @@ export class KeywordsService {
     };
   }
 
-  // ─── DATAFORSEO API CALLS ──────────────────────────────
+  // ─── SERPAPI KEYWORD DISCOVERY ─────────────────────────
 
-  private getAuthHeader(): string {
-    const credentials = Buffer.from(
-      `${this.dataForSeoLogin}:${this.dataForSeoPassword}`,
-    ).toString('base64');
-    return `Basic ${credentials}`;
-  }
-
-  private async fetchFromDataForSeo(
-    keyword: string,
-    country: string,
-  ): Promise<KeywordData> {
-    try {
-      const response = await axios.post(
-        'https://api.dataforseo.com/v3/keywords_data/google_ads/search_volume/live',
-        [
-          {
-            keywords: [keyword],
-            location_code: this.countryToLocationCode(country),
-            language_code: 'en',
-          },
-        ],
-        {
-          headers: {
-            Authorization: this.getAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      const result = response.data?.tasks?.[0]?.result?.[0];
-
-      if (!result) {
-        this.logger.warn(
-          `No DataForSEO result for "${keyword}", falling back to mock`,
-        );
-        return this.getMockKeywordData(keyword, country);
-      }
-
-      const monthlySearches: number[] = (
-        result.monthly_searches || []
-      ).map((m: any) => m.search_volume || 0);
-
-      return {
-        keyword,
-        country,
-        searchVolume: result.search_volume ?? null,
-        difficulty: result.competition_index
-          ? Math.round(result.competition_index * 100)
-          : null,
-        cpc: result.cpc ?? null,
-        trend: monthlySearches.length > 0 ? monthlySearches : null,
-        competition: result.competition || 'UNKNOWN',
-        intent: 'INFORMATIONAL' as SearchIntent,
-        wordCount: 0,
-        isQuestion: false,
-        priorityScore: 0,
-      };
-    } catch (err) {
-      this.logger.error(`DataForSEO search_volume error: ${err}`);
-      return this.getMockKeywordData(keyword, country);
-    }
-  }
-
-  private async fetchSuggestionsFromDataForSeo(
+  /**
+   * SerpAPI doesn't expose search volume / CPC / KD. We use it for keyword
+   * discovery (autocomplete + related searches + People Also Ask) and then
+   * batch-estimate metrics via Anthropic when available.
+   */
+  private async fetchSuggestionsFromSerpApi(
     keyword: string,
     country: string,
     limit: number,
-    page: number,
   ): Promise<{ keywords: KeywordSuggestion[]; total: number }> {
     try {
-      const offset = (page - 1) * limit;
+      // Run autocomplete + Google search in parallel to maximize keyword pool
+      const [autocompletions, searchResult] = await Promise.all([
+        serpApiAutocomplete({
+          apiKey: this.serpApiKey,
+          query: keyword,
+          country,
+        }).catch((err) => {
+          this.logger.warn(`SerpAPI autocomplete failed: ${err}`);
+          return [] as string[];
+        }),
+        serpApiSearch({
+          apiKey: this.serpApiKey,
+          query: keyword,
+          country,
+          num: 100,
+        }).catch((err) => {
+          this.logger.warn(`SerpAPI search failed: ${err}`);
+          return null;
+        }),
+      ]);
 
-      const response = await axios.post(
-        'https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_suggestions/live',
-        [
-          {
-            keyword,
-            location_code: this.countryToLocationCode(country),
-            language_code: 'en',
-            limit,
-            offset,
-            include_seed_keyword: false,
-          },
-        ],
-        {
-          headers: {
-            Authorization: this.getAuthHeader(),
-            'Content-Type': 'application/json',
-          },
-        },
-      );
-
-      const taskResult = response.data?.tasks?.[0]?.result?.[0];
-
-      if (!taskResult?.items) {
-        return this.getMockSuggestions(keyword, limit, page);
+      const discovered = new Set<string>();
+      for (const kw of autocompletions) discovered.add(kw.toLowerCase().trim());
+      if (searchResult) {
+        for (const kw of searchResult.relatedSearches)
+          discovered.add(kw.toLowerCase().trim());
+        for (const q of searchResult.relatedQuestions)
+          discovered.add(q.toLowerCase().trim().replace(/\?$/, ''));
       }
 
-      const keywords: KeywordSuggestion[] = taskResult.items.map(
-        (item: any) => ({
-          keyword: item.keyword,
-          searchVolume: item.keyword_info?.search_volume ?? null,
-          difficulty: item.keyword_properties?.keyword_difficulty
-            ? Math.round(item.keyword_properties.keyword_difficulty)
-            : null,
-          cpc: item.keyword_info?.cpc ?? null,
-          competition: item.keyword_info?.competition || 'UNKNOWN',
+      // Remove the seed keyword itself
+      discovered.delete(keyword.toLowerCase().trim());
+
+      if (discovered.size === 0) {
+        this.logger.warn(
+          `SerpAPI returned no keyword suggestions for "${keyword}"`,
+        );
+        if (this.hasOpenAI)
+          return this.fetchSuggestionsFromOpenAI(keyword, country, limit);
+        return { keywords: [], total: 0 };
+      }
+
+      const discoveredArray = Array.from(discovered).slice(0, limit);
+
+      // Enrich with Anthropic metric estimates if available
+      let enrichedKeywords: KeywordSuggestion[];
+      if (this.hasOpenAI) {
+        enrichedKeywords = await this.estimateMetricsBatch(
+          discoveredArray,
+          country,
+        );
+      } else {
+        enrichedKeywords = discoveredArray.map((kw) => ({
+          keyword: kw,
+          searchVolume: null,
+          difficulty: null,
+          cpc: null,
+          competition: 'UNKNOWN',
           intent: 'INFORMATIONAL' as SearchIntent,
           wordCount: 0,
           isQuestion: false,
           priorityScore: 0,
-        }),
-      );
+        }));
+      }
 
       return {
-        keywords,
-        total: taskResult.total_count || keywords.length,
+        keywords: enrichedKeywords,
+        total: enrichedKeywords.length,
       };
     } catch (err) {
-      this.logger.error(`DataForSEO suggestions error: ${err}`);
-      return this.getMockSuggestions(keyword, limit, page);
+      this.logger.error(`SerpAPI suggestions error: ${err}`);
+      if (this.hasOpenAI)
+        return this.fetchSuggestionsFromOpenAI(keyword, country, limit);
+      throw new ServiceUnavailableException('SerpAPI request failed and no fallback configured');
+    }
+  }
+
+  /**
+   * Estimate volume/CPC/KD for a batch of keywords via Anthropic.
+   * Splits into small sub-batches (10 each) for reliability — one large
+   * batch tends to truncate or produce malformed JSON which would wipe
+   * metrics for every keyword. Each sub-batch failure only affects its
+   * own keywords.
+   */
+  private async estimateMetricsBatch(
+    keywords: string[],
+    country: string,
+  ): Promise<KeywordSuggestion[]> {
+    const BATCH_SIZE = 10;
+    const results: KeywordSuggestion[] = [];
+
+    for (let i = 0; i < keywords.length; i += BATCH_SIZE) {
+      const batch = keywords.slice(i, i + BATCH_SIZE);
+      const batchResults = await this.estimateMetricsSubBatch(batch, country);
+      results.push(...batchResults);
+    }
+
+    return results;
+  }
+
+  private async estimateMetricsSubBatch(
+    keywords: string[],
+    country: string,
+  ): Promise<KeywordSuggestion[]> {
+    const empty = (kw: string): KeywordSuggestion => ({
+      keyword: kw,
+      searchVolume: null,
+      difficulty: null,
+      cpc: null,
+      competition: 'UNKNOWN',
+      intent: 'INFORMATIONAL' as SearchIntent,
+      wordCount: 0,
+      isQuestion: false,
+      priorityScore: 0,
+    });
+
+    try {
+      const keywordList = keywords.map((k, i) => `${i + 1}. ${k}`).join('\n');
+
+      const parsed = await callOpenAIJson<any>({
+        apiKey: this.openaiKey,
+        systemPrompt: `You are an SEO data analyst. Estimate realistic SEO metrics for each keyword in the list.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "results": [
+    {
+      "keyword": "<echo the keyword exactly as provided, same case, same spelling>",
+      "searchVolume": <integer monthly searches, e.g. 1200>,
+      "difficulty": <integer 0-100>,
+      "cpc": <float USD, e.g. 3.45>,
+      "competition": "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH"
+    }
+  ]
+}
+
+Rules:
+- Return exactly ${keywords.length} results in the same order as the input.
+- Never return null for searchVolume, difficulty, or cpc — always give your best estimate.
+- Be realistic. Long-tail keywords have low volume (50-500). Head terms have high volume (10k+).
+- Local/branded keywords have lower difficulty than head terms.`,
+        userPrompt: `Country: ${country}\n\nKeywords (in order):\n${keywordList}`,
+        temperature: 0.3,
+        maxTokens: 2000,
+        timeout: 30000,
+      });
+
+      const rawResults = Array.isArray(parsed.results) ? parsed.results : [];
+
+      // Build a normalized-keyword lookup for resilient string matching
+      const normalize = (s: string) =>
+        s.toLowerCase().trim().replace(/[?,.!]+$/, '');
+      const byKeyword = new Map<string, any>();
+      for (const r of rawResults) {
+        if (typeof r?.keyword === 'string') {
+          byKeyword.set(normalize(r.keyword), r);
+        }
+      }
+
+      // Match by normalized keyword string first, fall back to position index
+      // since the prompt instructs Anthropic to maintain input order.
+      return keywords.map((kw, idx) => {
+        const r = byKeyword.get(normalize(kw)) ?? rawResults[idx];
+        if (!r) return empty(kw);
+
+        return {
+          keyword: kw,
+          searchVolume:
+            typeof r.searchVolume === 'number' ? r.searchVolume : null,
+          difficulty: typeof r.difficulty === 'number' ? r.difficulty : null,
+          cpc: typeof r.cpc === 'number' ? r.cpc : null,
+          competition: r.competition || 'UNKNOWN',
+          intent: 'INFORMATIONAL' as SearchIntent,
+          wordCount: 0,
+          isQuestion: false,
+          priorityScore: 0,
+        };
+      });
+    } catch (err) {
+      this.logger.error(
+        `Anthropic sub-batch metric estimation failed (keywords: ${keywords.length}): ${err}`,
+      );
+      return keywords.map(empty);
     }
   }
 
@@ -569,16 +675,9 @@ export class KeywordsService {
     country: string,
   ): Promise<KeywordData> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.3,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an SEO data analyst. Given a keyword and country, estimate realistic SEO metrics based on your knowledge. Return ONLY valid JSON with this exact structure:
+      const parsed = await callOpenAIJson<any>({
+        apiKey: this.openaiKey,
+        systemPrompt: `You are an SEO data analyst. Given a keyword and country, estimate realistic SEO metrics based on your knowledge. Return ONLY valid JSON with this exact structure:
 {
   "searchVolume": <estimated monthly searches as integer>,
   "difficulty": <0-100 integer, how hard to rank>,
@@ -587,24 +686,10 @@ export class KeywordsService {
   "trend": [<12 integers representing monthly search volume for last 12 months, most recent first>]
 }
 Base your estimates on real-world search patterns. Be realistic — don't inflate numbers.`,
-            },
-            {
-              role: 'user',
-              content: `Keyword: "${keyword}"\nCountry: ${country}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 15000,
-        },
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+        userPrompt: `Keyword: "${keyword}"\nCountry: ${country}`,
+        temperature: 0.3,
+        timeout: 15000,
+      });
 
       return {
         keyword,
@@ -620,8 +705,8 @@ Base your estimates on real-world search patterns. Be realistic — don't inflat
         priorityScore: 0,
       };
     } catch (err) {
-      this.logger.error(`OpenAI keyword search error: ${err}`);
-      return this.getMockKeywordData(keyword, country);
+      this.logger.error(`Anthropic keyword search error: ${err}`);
+      throw new ServiceUnavailableException('Keyword metric estimation failed');
     }
   }
 
@@ -631,16 +716,9 @@ Base your estimates on real-world search patterns. Be realistic — don't inflat
     limit: number,
   ): Promise<{ keywords: KeywordSuggestion[]; total: number }> {
     try {
-      const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
-        {
-          model: 'gpt-4o-mini',
-          temperature: 0.5,
-          response_format: { type: 'json_object' },
-          messages: [
-            {
-              role: 'system',
-              content: `You are an SEO keyword research expert. Given a seed keyword, generate ${limit} related keyword suggestions that people actually search for. Include long-tail variations, questions, comparisons, and buying-intent keywords. Return ONLY valid JSON:
+      const parsed = await callOpenAIJson<any>({
+        apiKey: this.openaiKey,
+        systemPrompt: `You are an SEO keyword research expert. Given a seed keyword, generate ${limit} related keyword suggestions that people actually search for. Include long-tail variations, questions, comparisons, and buying-intent keywords. Return ONLY valid JSON:
 {
   "keywords": [
     {
@@ -653,24 +731,10 @@ Base your estimates on real-world search patterns. Be realistic — don't inflat
   ]
 }
 Make suggestions realistic, varied, and useful for SEO content planning. Order by estimated search volume descending.`,
-            },
-            {
-              role: 'user',
-              content: `Seed keyword: "${keyword}"\nCountry: ${country}\nGenerate ${limit} suggestions.`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openaiKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: 30000,
-        },
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      const parsed = JSON.parse(content);
+        userPrompt: `Seed keyword: "${keyword}"\nCountry: ${country}\nGenerate ${limit} suggestions.`,
+        temperature: 0.5,
+        timeout: 30000,
+      });
 
       const keywords: KeywordSuggestion[] = (parsed.keywords || []).map(
         (item: any) => ({
@@ -688,115 +752,12 @@ Make suggestions realistic, varied, and useful for SEO content planning. Order b
 
       return { keywords, total: keywords.length };
     } catch (err) {
-      this.logger.error(`OpenAI suggestions error: ${err}`);
-      return this.getMockSuggestions(keyword, limit, 1);
+      this.logger.error(`Anthropic suggestions error: ${err}`);
+      throw new ServiceUnavailableException('Keyword suggestion estimation failed');
     }
-  }
-
-  // ─── MOCK DATA ──────────────────────────────────────────
-
-  private getMockKeywordData(keyword: string, country: string): KeywordData {
-    const hash = this.simpleHash(keyword);
-    const volume = 500 + (hash % 50000);
-    const difficulty = 10 + (hash % 80);
-    const cpc = parseFloat((0.2 + (hash % 1500) / 100).toFixed(2));
-
-    const trend: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      trend.push(Math.max(100, volume + Math.floor(Math.sin(i) * volume * 0.2)));
-    }
-
-    return {
-      keyword,
-      country,
-      searchVolume: volume,
-      difficulty,
-      cpc,
-      trend,
-      competition: this.difficultyToCompetition(difficulty),
-      intent: 'INFORMATIONAL' as SearchIntent,
-      wordCount: 0,
-      isQuestion: false,
-      priorityScore: 0,
-    };
-  }
-
-  private getMockSuggestions(
-    keyword: string,
-    limit: number,
-    page: number,
-  ): { keywords: KeywordSuggestion[]; total: number } {
-    const prefixes = [
-      'best',
-      'top',
-      'how to',
-      'what is',
-      'free',
-      'cheap',
-      'online',
-      'near me',
-      '',
-      'buy',
-    ];
-    const suffixes = [
-      'tools',
-      'software',
-      'services',
-      'guide',
-      'tips',
-      'examples',
-      'review',
-      'alternatives',
-      'pricing',
-      'vs',
-      'for beginners',
-      'tutorial',
-      '2026',
-      'comparison',
-      'benefits',
-    ];
-
-    const allSuggestions: KeywordSuggestion[] = [];
-
-    for (const prefix of prefixes) {
-      for (const suffix of suffixes) {
-        const suggested = [prefix, keyword, suffix]
-          .filter(Boolean)
-          .join(' ')
-          .trim();
-        const h = this.simpleHash(suggested);
-        allSuggestions.push({
-          keyword: suggested,
-          searchVolume: 100 + (h % 30000),
-          difficulty: 5 + (h % 90),
-          cpc: parseFloat((0.1 + (h % 1200) / 100).toFixed(2)),
-          competition: this.difficultyToCompetition(5 + (h % 90)),
-          intent: 'INFORMATIONAL' as SearchIntent,
-          wordCount: 0,
-          isQuestion: false,
-          priorityScore: 0,
-        });
-      }
-    }
-
-    const total = allSuggestions.length;
-    const start = (page - 1) * limit;
-    const keywords = allSuggestions.slice(start, start + limit);
-
-    return { keywords, total };
   }
 
   // ─── HELPERS ────────────────────────────────────────────
-
-  private simpleHash(str: string): number {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return Math.abs(hash);
-  }
 
   private difficultyToCompetition(difficulty: number | null): string {
     if (difficulty === null) return 'UNKNOWN';
@@ -804,23 +765,6 @@ Make suggestions realistic, varied, and useful for SEO content planning. Order b
     if (difficulty < 50) return 'MEDIUM';
     if (difficulty < 75) return 'HIGH';
     return 'VERY_HIGH';
-  }
-
-  private countryToLocationCode(country: string): number {
-    const map: Record<string, number> = {
-      US: 2840,
-      GB: 2826,
-      CA: 2124,
-      AU: 2036,
-      IN: 2356,
-      DE: 2276,
-      FR: 2250,
-      ES: 2724,
-      IT: 2380,
-      BR: 2076,
-      JP: 2392,
-    };
-    return map[country.toUpperCase()] || 2840;
   }
 
   // ─── INTENT CLASSIFICATION (pattern-based) ──────────────

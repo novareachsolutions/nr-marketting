@@ -73,10 +73,10 @@ function KeywordDetailContent() {
               <div>
                 <p className={styles.breadcrumb}>
                   <Link
-                    href={`/dashboard/projects/${projectId}/position-tracking/keywords`}
+                    href={`/dashboard/projects/${projectId}/position-tracking`}
                     className={styles.backLink}
                   >
-                    ← Rankings Table
+                    ← Position Tracking
                   </Link>
                 </p>
                 <h1 className={styles.title}>{data.keyword}</h1>

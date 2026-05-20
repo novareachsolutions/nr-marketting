@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import Head from 'next/head';
-import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AuthGuard } from '@/components/auth/AuthGuard';
 import { GuideModal } from '@/components/ui/Dialog';
 import { NextStepBar } from '@/components/ui/NextStepBar';
 import { Sidebar, sidebarStyles } from '@/components/layout/Sidebar';
+import { RankingsTableSection } from '@/components/position-tracking/RankingsTableSection';
 import {
   usePositionTrackingOverview,
   usePositionTrackingTrend,
@@ -57,6 +57,7 @@ function PositionTrackingContent() {
   const [checkingNow, setCheckingNow] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [trendDays, setTrendDays] = useState(30);
+  const [checkCountry, setCheckCountry] = useState('AU');
 
   const { data: overview, isLoading: overviewLoading } = usePositionTrackingOverview(projectId);
   const { data: trend } = usePositionTrackingTrend(projectId, trendDays);
@@ -67,13 +68,24 @@ function PositionTrackingContent() {
     if (!projectId || checkingNow) return;
     setCheckingNow(true);
     try {
-      await triggerCheck.mutateAsync({
+      const res: any = await triggerCheck.mutateAsync({
         url: `/projects/${projectId}/position-tracking/check-now`,
-        body: {},
+        body: checkCountry ? { country: checkCountry } : {},
       });
-      showSuccessToast('Check Started', 'Position check is running in the background');
-      queryClient.invalidateQueries({ queryKey: ['pt-overview'] });
-      queryClient.invalidateQueries({ queryKey: ['pt-keywords'] });
+      const count = res?.data?.keywordCount ?? 0;
+      const where = checkCountry ? `Google ${checkCountry}` : "each keyword's own country";
+      showSuccessToast(
+        'Check Started',
+        `Checking ${count} keyword${count === 1 ? '' : 's'} on ${where}. Results appear in ~20s.`,
+      );
+      // The check runs in the background; refetch a few times so the table
+      // populates as results land.
+      [4000, 10000, 20000].forEach((ms) =>
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['pt-overview'] });
+          queryClient.invalidateQueries({ queryKey: ['pt-keywords'] });
+        }, ms),
+      );
     } catch {
       // handled by global error
     } finally {
@@ -164,6 +176,26 @@ function PositionTrackingContent() {
           <div className={styles.headerActions}>
             <select
               className={styles.scheduleSelect}
+              value={checkCountry}
+              onChange={(e) => setCheckCountry(e.target.value)}
+              title="Country to check rankings in (Google domain). 'No selection' keeps each keyword's existing country."
+            >
+              <option value="">No selection (keep per-keyword)</option>
+              <option value="AU">🇦🇺 Australia</option>
+              <option value="US">🇺🇸 United States</option>
+              <option value="GB">🇬🇧 United Kingdom</option>
+              <option value="CA">🇨🇦 Canada</option>
+              <option value="NZ">🇳🇿 New Zealand</option>
+              <option value="IN">🇮🇳 India</option>
+              <option value="DE">🇩🇪 Germany</option>
+              <option value="FR">🇫🇷 France</option>
+              <option value="ES">🇪🇸 Spain</option>
+              <option value="IT">🇮🇹 Italy</option>
+              <option value="BR">🇧🇷 Brazil</option>
+              <option value="JP">🇯🇵 Japan</option>
+            </select>
+            <select
+              className={styles.scheduleSelect}
               value={ov?.rankCheckSchedule || 'NONE'}
               onChange={(e) => handleScheduleChange(e.target.value)}
             >
@@ -177,7 +209,7 @@ function PositionTrackingContent() {
               onClick={handleCheckNow}
               disabled={checkingNow}
             >
-              {checkingNow ? 'Checking...' : 'Check Now'}
+              {checkingNow ? 'Checking...' : checkCountry ? `Check Now (${checkCountry})` : 'Check Now'}
             </button>
           </div>
         </div>
@@ -185,16 +217,7 @@ function PositionTrackingContent() {
         {overviewLoading ? (
           <div className={styles.loadingState}>Loading position data...</div>
         ) : !ov || ov.totalKeywords === 0 ? (
-          <div className={styles.emptyState}>
-            <h2>No keywords tracked yet</h2>
-            <p>Add keywords to start tracking their positions on Google.</p>
-            <Link
-              href={`/dashboard/projects/${projectId}/position-tracking/keywords`}
-              className={styles.addKeywordsLink}
-            >
-              Go to Rankings Table →
-            </Link>
-          </div>
+          <RankingsTableSection projectId={projectId} />
         ) : (
           <>
             {/* Summary Cards */}
@@ -354,15 +377,8 @@ function PositionTrackingContent() {
               </div>
             )}
 
-            {/* Link to Rankings Table */}
-            <div className={styles.viewAllRow}>
-              <Link
-                href={`/dashboard/projects/${projectId}/position-tracking/keywords`}
-                className={styles.viewAllBtn}
-              >
-                View All Keywords →
-              </Link>
-            </div>
+            {/* Rankings Table (inline, replaces the old separate page) */}
+            <RankingsTableSection projectId={projectId} />
           </>
         )}
         <NextStepBar projectId={projectId} currentStep={7} />

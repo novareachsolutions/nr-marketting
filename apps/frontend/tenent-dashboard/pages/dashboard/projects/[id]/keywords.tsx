@@ -300,8 +300,12 @@ function ProjectKeywordsContent() {
                   <thead>
                     <tr>
                       <th>Keyword</th>
+                      <th>Intent</th>
+                      <th>Volume</th>
+                      <th>KD%</th>
+                      <th>CPC</th>
+                      <th>Priority</th>
                       <th>Target URL</th>
-                      <th>Notes</th>
                       <th>Saved</th>
                       <th>Action</th>
                     </tr>
@@ -309,7 +313,27 @@ function ProjectKeywordsContent() {
                   <tbody>
                     {kwData.keywords.map((kw) => (
                       <tr key={kw.id}>
-                        <td className={styles.kwCell}>{kw.keyword}</td>
+                        <td className={styles.kwCell}>
+                          {kw.keyword}
+                          {kw.isQuestion && <span className={styles.qTag}>Q</span>}
+                        </td>
+                        <td>
+                          <span
+                            className={styles.intentTag}
+                            style={{ backgroundColor: INTENT_COLORS[kw.intent] }}
+                            title={kw.intent}
+                          >
+                            {INTENT_LABELS[kw.intent]}
+                          </span>
+                        </td>
+                        <td>{formatVolume(kw.searchVolume)}</td>
+                        <td>
+                          <span style={{ color: getDifficultyColor(kw.difficulty) }}>
+                            {kw.difficulty ?? '--'}
+                          </span>
+                        </td>
+                        <td>{kw.cpc !== null ? `$${kw.cpc.toFixed(2)}` : '--'}</td>
+                        <td><strong>{kw.priorityScore || '--'}</strong></td>
                         <td className={styles.urlCell}>
                           {kw.targetUrl ? (
                             <a
@@ -321,11 +345,6 @@ function ProjectKeywordsContent() {
                               {kw.targetUrl}
                             </a>
                           ) : (
-                            <span className={styles.muted}>--</span>
-                          )}
-                        </td>
-                        <td className={styles.notesCell}>
-                          {kw.notes || (
                             <span className={styles.muted}>--</span>
                           )}
                         </td>

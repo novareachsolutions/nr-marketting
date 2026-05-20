@@ -17,6 +17,7 @@ import { GbpInsightsService } from './gbp-insights.service';
 import { GbpReviewsService } from './gbp-reviews.service';
 import { GbpPostsService } from './gbp-posts.service';
 import { GbpAiService } from './gbp-ai.service';
+import { GbpLocalPackService } from './gbp-local-pack.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GbpPostType } from '@prisma/client';
 
@@ -29,6 +30,7 @@ export class GbpOptimizationController {
     private readonly reviewsService: GbpReviewsService,
     private readonly postsService: GbpPostsService,
     private readonly aiService: GbpAiService,
+    private readonly localPackService: GbpLocalPackService,
   ) {}
 
   // ─── CONNECTION / STATUS ───────────────────────────────
@@ -81,6 +83,26 @@ export class GbpOptimizationController {
       req.user.id,
       id,
       months,
+    );
+    return { success: true, data };
+  }
+
+  // ─── LOCAL PACK RANKING (SerpAPI) ──────────────────────
+
+  /**
+   * Check where this business ranks in the Google local pack for a given keyword.
+   * Uses SerpAPI's google_local engine (1 credit per call).
+   */
+  @Get('locations/:id/local-pack')
+  async localPack(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('keyword') keyword: string,
+  ) {
+    const data = await this.localPackService.checkLocalRanking(
+      req.user.id,
+      id,
+      keyword || '',
     );
     return { success: true, data };
   }

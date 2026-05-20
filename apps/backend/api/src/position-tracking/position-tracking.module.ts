@@ -4,9 +4,10 @@ import { PositionTrackingService } from './position-tracking.service';
 import { RankCheckerService } from './rank-checker.service';
 import { RankCheckSchedulerService } from './rank-check-scheduler.service';
 import { PrismaModule } from '../prisma/prisma.module';
+import { GoogleOAuthModule } from '../google-oauth/google-oauth.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, GoogleOAuthModule],
   controllers: [PositionTrackingController],
   providers: [
     PositionTrackingService,

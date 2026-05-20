@@ -32,7 +32,7 @@ export class ReportsService {
     private readonly topPagesService: TopPagesService,
     private readonly positionTrackingService: PositionTrackingService,
   ) {
-    this.openaiKey = this.config.get<string>('OPENAI_API_KEY') || '';
+    this.openaiKey = this.config.get<string>('ANTHROPIC_API_KEY') || '';
   }
 
   // ─── REPORT SETTINGS ─────────────────────────────────

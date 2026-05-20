@@ -25,6 +25,12 @@ interface RobotsTxtAnalysis {
   sitemapUrls: string[];
   raw: string;
   syntaxErrors: string[];
+  /** Status code returned for /robots.txt — useful even when we treat the
+   *  response as "missing" because it was an HTML SPA fallback. */
+  fetchedStatus: number | null;
+  /** First few hundred characters of whatever response body we actually got
+   *  for /robots.txt — shown to users so they can see what's there. */
+  fetchedBodyPreview: string;
 }
 
 interface SitemapAnalysis {
@@ -33,6 +39,9 @@ interface SitemapAnalysis {
   url: string | null;
   urls: string[];
   raw: string;
+  /** What we observed at each candidate URL — used as the source snippet
+   *  when no valid sitemap was found. */
+  attempts: { url: string; status: number | null; bodyPreview: string }[];
 }
 
 @Injectable()
@@ -60,17 +69,19 @@ export class SiteWideAuditService {
     issues.push(...this.checkSitemap(sitemap, robots));
     issues.push(...this.checkSitemapVsCanonical(sitemap, await this.fetchCanonicals(crawlJobId)));
 
-    const [redirectIssues, faviconIssue, certIssues, custom404Issue] = await Promise.all([
+    const [redirectIssues, faviconIssue, certIssues, custom404Issue, headerIssues] = await Promise.all([
       this.checkProtocolAndHostRedirects(httpClient, domain),
       this.checkFavicon(httpClient, domain),
       this.checkSslCertificate(domain),
       this.checkCustom404(httpClient, domain),
+      this.checkServerHeaders(httpClient, domain),
     ]);
 
     issues.push(...redirectIssues);
     if (faviconIssue) issues.push(faviconIssue);
     issues.push(...certIssues);
     if (custom404Issue) issues.push(custom404Issue);
+    issues.push(...headerIssues);
 
     if (issues.length === 0) {
       return { errors: 0, warnings: 0, notices: 0 };
@@ -117,11 +128,28 @@ export class SiteWideAuditService {
       sitemapUrls: [],
       raw: '',
       syntaxErrors: [],
+      fetchedStatus: null,
+      fetchedBodyPreview: '',
     };
 
     try {
       const res = await http.get(url);
-      if (res.status !== 200 || typeof res.data !== 'string') return empty;
+      const status = res.status;
+      const previewBody = typeof res.data === 'string' ? res.data : '';
+      empty.fetchedStatus = status;
+      empty.fetchedBodyPreview = previewBody.slice(0, 400);
+
+      if (status !== 200 || typeof res.data !== 'string') return empty;
+
+      // SPAs commonly return 200 + HTML for any unknown path. A real robots.txt
+      // must be text/plain (or unspecified) AND must not look like HTML.
+      const contentType = String(res.headers?.['content-type'] || '').toLowerCase();
+      if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
+        return empty;
+      }
+      if (this.looksLikeHtml(res.data)) {
+        return empty;
+      }
 
       const raw = res.data;
       const syntaxErrors: string[] = [];
@@ -173,6 +201,8 @@ export class SiteWideAuditService {
         sitemapUrls,
         raw,
         syntaxErrors,
+        fetchedStatus: empty.fetchedStatus,
+        fetchedBodyPreview: empty.fetchedBodyPreview,
       };
     } catch {
       return empty;
@@ -183,10 +213,13 @@ export class SiteWideAuditService {
     const issues: SiteWideIssue[] = [];
 
     if (!r.exists) {
+      const statusInfo = r.fetchedStatus !== null ? `HTTP ${r.fetchedStatus}` : 'no response';
+      const body = r.fetchedBodyPreview ? `\n\n${r.fetchedBodyPreview}` : '';
       issues.push({
         type: 'ROBOTS_TXT_MISSING',
         severity: 'ERROR',
         message: 'robots.txt file is not present at /robots.txt',
+        details: { sourceSnippet: `GET /robots.txt → ${statusInfo}${body}`, status: r.fetchedStatus },
         suggestion: 'Add a robots.txt file at the site root to control crawler access.',
       });
       return issues; // No further checks possible without the file.
@@ -197,34 +230,46 @@ export class SiteWideAuditService {
         type: 'ROBOTS_TXT_SYNTAX_ERROR',
         severity: 'ERROR',
         message: `robots.txt has ${r.syntaxErrors.length} syntax error(s)`,
-        details: { errors: r.syntaxErrors.slice(0, 5) },
+        details: { errors: r.syntaxErrors.slice(0, 5), sourceSnippet: r.syntaxErrors.slice(0, 5).join('\n') },
         suggestion: 'Each rule must be "Field: value" — fix invalid lines so crawlers parse the file correctly.',
       });
     }
 
     if (r.blocksImportant) {
+      // Find the offending Disallow line(s) for the snippet.
+      const offendingLines = r.raw.split('\n')
+        .filter((l) => /^\s*Disallow\s*:\s*(\/|\/index|\/blog|\/products|\/services|\/about|\/contact)/i.test(l))
+        .slice(0, 5);
       issues.push({
         type: 'ROBOTS_TXT_BLOCKS_IMPORTANT',
         severity: 'ERROR',
         message: 'robots.txt blocks important pages from crawlers',
+        details: { sourceSnippet: offendingLines.join('\n') || undefined },
         suggestion: 'Remove Disallow directives that target your homepage, blog, products, or other key URLs.',
       });
     }
 
     if (r.blocksAssets) {
+      const offendingLines = r.raw.split('\n')
+        .filter((l) => /^\s*Disallow\s*:.*\.(css|js|png|jpg|jpeg|svg|webp)|\/assets\/|\/static\/|\/css\/|\/js\//i.test(l))
+        .slice(0, 5);
       issues.push({
         type: 'ROBOTS_TXT_BLOCKS_ASSETS',
         severity: 'ERROR',
         message: 'robots.txt blocks CSS, JS, or image resources',
+        details: { sourceSnippet: offendingLines.join('\n') || undefined },
         suggestion: 'Allow Googlebot to load CSS/JS/images so it can render your pages correctly.',
       });
     }
 
     if (!r.hasSitemapDirective) {
+      // Show the actual robots.txt content so the user can see what IS there
+      // (and confirm there's truly no Sitemap: line).
       issues.push({
         type: 'ROBOTS_TXT_NO_SITEMAP_REF',
         severity: 'WARNING',
         message: 'robots.txt does not reference a sitemap',
+        details: { sourceSnippet: r.raw.slice(0, 600) },
         suggestion: 'Add a "Sitemap: https://yourdomain.com/sitemap.xml" line to robots.txt.',
       });
     }
@@ -244,28 +289,45 @@ export class SiteWideAuditService {
       `https://${domain}/wp-sitemap.xml`,
     ];
 
+    const attempts: { url: string; status: number | null; bodyPreview: string }[] = [];
     for (const url of candidates) {
       try {
         const res = await http.get(url);
-        if (res.status !== 200 || typeof res.data !== 'string') continue;
+        const status = res.status;
+        const body = typeof res.data === 'string' ? res.data : '';
+        attempts.push({ url, status, bodyPreview: body.slice(0, 200) });
+
+        if (status !== 200 || typeof res.data !== 'string') continue;
+
+        // Reject SPA fallbacks: real sitemaps are XML, not HTML.
+        const contentType = String(res.headers?.['content-type'] || '').toLowerCase();
+        if (contentType.includes('text/html') || contentType.includes('application/xhtml')) continue;
+        if (this.looksLikeHtml(res.data)) continue;
+
         const raw = res.data;
         const validXml = /<\?xml[^>]+\?>/i.test(raw) && (/<urlset[\s>]/i.test(raw) || /<sitemapindex[\s>]/i.test(raw));
         const urls = Array.from(raw.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/gi)).map((m) => m[1].trim());
-        return { exists: true, validXml, url, urls, raw };
-      } catch { /* try next */ }
+        return { exists: true, validXml, url, urls, raw, attempts };
+      } catch (err: any) {
+        attempts.push({ url, status: null, bodyPreview: String(err?.message || err).slice(0, 200) });
+      }
     }
 
-    return { exists: false, validXml: false, url: null, urls: [], raw: '' };
+    return { exists: false, validXml: false, url: null, urls: [], raw: '', attempts };
   }
 
   private checkSitemap(s: SitemapAnalysis, robots: RobotsTxtAnalysis): SiteWideIssue[] {
     const issues: SiteWideIssue[] = [];
 
     if (!s.exists) {
+      const attemptDump = s.attempts
+        .map((a) => `GET ${a.url} → ${a.status ?? 'error'}${a.bodyPreview ? `\n  ${a.bodyPreview.replace(/\n/g, ' ').slice(0, 120)}` : ''}`)
+        .join('\n');
       issues.push({
         type: 'SITEMAP_MISSING',
         severity: 'ERROR',
         message: 'No sitemap.xml found at the standard locations',
+        details: { sourceSnippet: attemptDump || 'No candidate URLs returned a valid XML sitemap.', attempts: s.attempts },
         suggestion: 'Generate a sitemap.xml at /sitemap.xml or reference it from robots.txt.',
       });
       return issues;
@@ -276,7 +338,7 @@ export class SiteWideAuditService {
         type: 'SITEMAP_INVALID_XML',
         severity: 'ERROR',
         message: 'Sitemap response is not valid XML',
-        details: { url: s.url },
+        details: { url: s.url, sourceSnippet: `${s.url}\nFirst 200 chars: ${(s.raw || '').slice(0, 200)}` },
         suggestion: 'Validate your sitemap with the sitemaps.org schema and fix XML errors.',
       });
     }
@@ -387,9 +449,28 @@ export class SiteWideAuditService {
 
   private async checkFavicon(http: AxiosInstance, domain: string): Promise<SiteWideIssue | null> {
     try {
-      const res = await http.get(`https://${domain}/favicon.ico`);
-      if (res.status === 200) return null;
+      const res = await http.get(`https://${domain}/favicon.ico`, { responseType: 'arraybuffer' });
+      if (res.status !== 200) {
+        return this.faviconMissingIssue();
+      }
+      // SPA fallback check — a real favicon is an image, not HTML.
+      const contentType = String(res.headers?.['content-type'] || '').toLowerCase();
+      if (contentType.includes('text/html') || contentType.includes('application/xhtml')) {
+        return this.faviconMissingIssue();
+      }
+      // If no content-type declared, sniff the first few bytes for known image magic numbers.
+      if (!contentType) {
+        const buf = Buffer.isBuffer(res.data) ? res.data : Buffer.from(res.data || '');
+        if (buf.length === 0 || this.looksLikeHtml(buf.toString('utf8', 0, 200))) {
+          return this.faviconMissingIssue();
+        }
+      }
+      return null;
     } catch { /* fall through */ }
+    return this.faviconMissingIssue();
+  }
+
+  private faviconMissingIssue(): SiteWideIssue {
     return {
       type: 'FAVICON_MISSING',
       severity: 'NOTICE',
@@ -432,70 +513,205 @@ export class SiteWideAuditService {
     }
   }
 
+  // -------------------------------------------------- server-level HTTP headers
+
+  /**
+   * Inspect the response headers of the homepage once. Security/cache/compression
+   * headers are typically set at the server or CDN level and apply to every page,
+   * so reporting them per-page would inflate counts by N.
+   */
+  private async checkServerHeaders(http: AxiosInstance, domain: string): Promise<SiteWideIssue[]> {
+    const issues: SiteWideIssue[] = [];
+    let headers: Record<string, string> = {};
+
+    try {
+      const res = await http.get(`https://${domain}/`);
+      if (res.status >= 400) return issues;
+      headers = this.lowercaseHeaders(res.headers);
+    } catch {
+      return issues;
+    }
+
+    // Build a snippet of the ACTUAL response headers we got from the homepage,
+    // so users can see exactly what the server returned. We render it as a
+    // standard HTTP-header dump (`Name: value` per line) and cap to ~20 entries.
+    const allHeaderLines = Object.entries(headers)
+      .map(([k, v]) => `${this.titleCaseHeader(k)}: ${v}`)
+      .slice(0, 20)
+      .join('\n');
+    const headerDump = allHeaderLines || '(server returned no response headers)';
+
+    if (!headers['strict-transport-security']) {
+      issues.push({
+        type: 'MISSING_HSTS_HEADER',
+        severity: 'WARNING',
+        message: 'Strict-Transport-Security (HSTS) header is missing on the homepage',
+        details: { sourceSnippet: headerDump, missing: 'Strict-Transport-Security' },
+        suggestion: 'Add HSTS header (e.g. "max-age=31536000; includeSubDomains") to enforce HTTPS-only.',
+      });
+    }
+    if (!headers['content-security-policy']) {
+      issues.push({
+        type: 'MISSING_CSP_HEADER',
+        severity: 'WARNING',
+        message: 'Content-Security-Policy header is missing',
+        details: { sourceSnippet: headerDump, missing: 'Content-Security-Policy' },
+        suggestion: 'Add a CSP header to prevent XSS and code-injection attacks.',
+      });
+    }
+    if (!headers['x-frame-options']) {
+      issues.push({
+        type: 'MISSING_X_FRAME_OPTIONS',
+        severity: 'WARNING',
+        message: 'X-Frame-Options header is missing',
+        details: { sourceSnippet: headerDump, missing: 'X-Frame-Options' },
+        suggestion: 'Add "X-Frame-Options: SAMEORIGIN" or "DENY" to prevent clickjacking.',
+      });
+    }
+    if (!headers['referrer-policy']) {
+      issues.push({
+        type: 'MISSING_REFERRER_POLICY',
+        severity: 'NOTICE',
+        message: 'Referrer-Policy header is missing',
+        details: { sourceSnippet: headerDump, missing: 'Referrer-Policy' },
+        suggestion: 'Set Referrer-Policy (e.g. "strict-origin-when-cross-origin") to control referrer leaks.',
+      });
+    }
+    if (!headers['x-content-type-options']) {
+      issues.push({
+        type: 'MISSING_X_CONTENT_TYPE_OPTIONS',
+        severity: 'NOTICE',
+        message: 'X-Content-Type-Options: nosniff header is missing',
+        details: { sourceSnippet: headerDump, missing: 'X-Content-Type-Options' },
+        suggestion: 'Add "X-Content-Type-Options: nosniff" to prevent MIME-type sniffing.',
+      });
+    }
+    if (!headers['permissions-policy']) {
+      issues.push({
+        type: 'MISSING_PERMISSIONS_POLICY',
+        severity: 'NOTICE',
+        message: 'Permissions-Policy header is missing',
+        details: { sourceSnippet: headerDump, missing: 'Permissions-Policy' },
+        suggestion: 'Add Permissions-Policy to control which browser features the page may use.',
+      });
+    }
+    if (!headers['cache-control'] && !headers['expires']) {
+      issues.push({
+        type: 'MISSING_CACHE_HEADERS',
+        severity: 'WARNING',
+        message: 'No Cache-Control or Expires header set on homepage',
+        details: { sourceSnippet: headerDump, missing: 'Cache-Control / Expires' },
+        suggestion: 'Configure caching headers (Cache-Control or Expires) to improve repeat-visit performance.',
+      });
+    }
+    const encoding = headers['content-encoding'] || '';
+    if (!/gzip|br|deflate|zstd/i.test(encoding)) {
+      issues.push({
+        type: 'MISSING_COMPRESSION',
+        severity: 'WARNING',
+        message: 'Homepage response is not gzip / brotli compressed',
+        details: { sourceSnippet: headerDump, contentEncoding: encoding || null },
+        suggestion: 'Enable gzip or brotli compression on the server (or CDN).',
+      });
+    }
+
+    return issues;
+  }
+
+  /** Convert a lowercase header name to its conventional canonical casing (Strict-Transport-Security, etc.). */
+  private titleCaseHeader(name: string): string {
+    return name
+      .split('-')
+      .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
+      .join('-');
+  }
+
+  private lowercaseHeaders(raw: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (!raw || typeof raw !== 'object') return out;
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === 'string') out[k.toLowerCase()] = v;
+      else if (Array.isArray(v) && v.every((x) => typeof x === 'string')) out[k.toLowerCase()] = (v as string[]).join(', ');
+    }
+    return out;
+  }
+
   // --------------------------------------------------------------- SSL / TLS
 
   private checkSslCertificate(domain: string): Promise<SiteWideIssue[]> {
     return new Promise((resolve) => {
       const issues: SiteWideIssue[] = [];
       const host = domain.replace(/^www\./, '');
+      let settled = false;
+
+      const finish = (extra?: SiteWideIssue) => {
+        if (settled) return;
+        settled = true;
+        if (extra) issues.push(extra);
+        try { socket.destroy(); } catch { /* ignore */ }
+        resolve(issues);
+      };
+
       const socket = tls.connect(
         { host, port: 443, servername: host, timeout: 8000 },
         () => {
           try {
             const cert = socket.getPeerCertificate();
             if (!cert || !cert.valid_to) {
-              issues.push({
+              finish({
                 type: 'SSL_CERT_INVALID',
                 severity: 'ERROR',
                 message: 'Could not retrieve SSL certificate details',
               });
+              return;
+            }
+            const expiry = new Date(cert.valid_to).getTime();
+            const daysUntilExpiry = Math.floor((expiry - Date.now()) / 86_400_000);
+            if (daysUntilExpiry < 0) {
+              finish({
+                type: 'SSL_CERT_INVALID',
+                severity: 'ERROR',
+                message: `SSL certificate has expired (${cert.valid_to})`,
+                details: { validTo: cert.valid_to },
+                suggestion: 'Renew the SSL certificate immediately.',
+              });
+            } else if (daysUntilExpiry < 30) {
+              finish({
+                type: 'SSL_CERT_EXPIRING_SOON',
+                severity: 'ERROR',
+                message: `SSL certificate expires in ${daysUntilExpiry} day(s)`,
+                details: { validTo: cert.valid_to, daysUntilExpiry },
+                suggestion: 'Renew the SSL certificate before it expires.',
+              });
             } else {
-              const expiry = new Date(cert.valid_to).getTime();
-              const daysUntilExpiry = Math.floor((expiry - Date.now()) / 86_400_000);
-              if (daysUntilExpiry < 0) {
-                issues.push({
-                  type: 'SSL_CERT_INVALID',
-                  severity: 'ERROR',
-                  message: `SSL certificate has expired (${cert.valid_to})`,
-                  details: { validTo: cert.valid_to },
-                  suggestion: 'Renew the SSL certificate immediately.',
-                });
-              } else if (daysUntilExpiry < 30) {
-                issues.push({
-                  type: 'SSL_CERT_EXPIRING_SOON',
-                  severity: 'ERROR',
-                  message: `SSL certificate expires in ${daysUntilExpiry} day(s)`,
-                  details: { validTo: cert.valid_to, daysUntilExpiry },
-                  suggestion: 'Renew the SSL certificate before it expires.',
-                });
-              }
+              finish(); // healthy cert
             }
           } catch {
-            issues.push({
+            finish({
               type: 'SSL_CERT_INVALID',
               severity: 'ERROR',
               message: 'Failed to inspect SSL certificate',
             });
-          } finally {
-            socket.end();
-            resolve(issues);
           }
         },
       );
 
       socket.on('error', () => {
-        issues.push({
+        finish({
           type: 'SSL_CERT_INVALID',
           severity: 'ERROR',
-          message: 'Could not establish TLS connection',
+          message: 'Could not establish TLS connection to inspect the SSL certificate',
           suggestion: 'Verify HTTPS is configured and the SSL certificate is valid.',
         });
-        resolve(issues);
       });
 
       socket.on('timeout', () => {
-        socket.destroy();
-        resolve(issues);
+        finish({
+          type: 'SSL_CERT_INVALID',
+          severity: 'ERROR',
+          message: 'TLS handshake timed out — could not inspect SSL certificate',
+          suggestion: 'Check that the server responds quickly on port 443 with a valid certificate.',
+        });
       });
     });
   }
@@ -512,6 +728,23 @@ export class SiteWideAuditService {
       },
       validateStatus: () => true,
     });
+  }
+
+  /**
+   * Detect SPA fallbacks: many sites return a 200 HTML "Page not found" shell
+   * for unknown URLs, including /robots.txt and /sitemap.xml. We reject those
+   * by sniffing the body for HTML markers.
+   */
+  private looksLikeHtml(body: unknown): boolean {
+    if (typeof body !== 'string') return false;
+    const head = body.slice(0, 500).trim().toLowerCase();
+    if (!head) return false;
+    return (
+      head.startsWith('<!doctype html') ||
+      head.startsWith('<html') ||
+      /<head[\s>]/.test(head) ||
+      /<body[\s>]/.test(head)
+    );
   }
 
   private canonicalize(rawUrl: string): string {

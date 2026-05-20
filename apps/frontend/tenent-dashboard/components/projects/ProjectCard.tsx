@@ -3,6 +3,7 @@ import type { Project } from '@/types/project';
 import { Badge } from '../ui/Badge';
 import { Trash2, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useGaStatus } from '@/hooks/useGoogleAnalytics';
 
 interface Props {
   project: Project;
@@ -18,6 +19,22 @@ const SOURCE_BADGE: Record<string, { variant: 'default' | 'wordpress' | 'github'
 export function ProjectCard({ project, onDelete }: Props) {
   const router = useRouter();
   const badge = SOURCE_BADGE[project.sourceType] || SOURCE_BADGE.MANUAL;
+  const { data: gaStatus } = useGaStatus(project.domain);
+
+  // Only surface a GA badge once we know the Google account is connected:
+  // green when analytics is live on the domain, amber when GA isn't detected.
+  const gaBadge = gaStatus?.connected
+    ? gaStatus.implemented
+      ? { variant: 'success' as const, label: 'Analytics' }
+      : { variant: 'warning' as const, label: 'No GA' }
+    : null;
+  const gaTitle = gaStatus?.connected
+    ? gaStatus.implemented
+      ? 'Google Analytics is active on this domain'
+      : gaStatus.matched
+        ? 'A GA4 property matches this domain but has no recent data'
+        : 'Google Analytics is not detected on this domain'
+    : undefined;
 
   return (
     <div
@@ -45,6 +62,11 @@ export function ProjectCard({ project, onDelete }: Props) {
         <div className="flex items-center gap-1.5">
           {!project.isActive && (
             <Badge variant="warning" size="sm">Paused</Badge>
+          )}
+          {gaBadge && (
+            <Badge variant={gaBadge.variant} size="sm" title={gaTitle}>
+              {gaBadge.label}
+            </Badge>
           )}
           <Badge variant={badge.variant} size="sm">{badge.label}</Badge>
           <button

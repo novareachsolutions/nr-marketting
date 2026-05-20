@@ -39,6 +39,15 @@ export interface ProjectKeyword {
   targetUrl: string | null;
   notes: string | null;
   createdAt: string;
+  // Enriched from KeywordCache by the backend
+  searchVolume: number | null;
+  difficulty: number | null;
+  cpc: number | null;
+  competition: string;
+  intent: SearchIntent;
+  isQuestion: boolean;
+  wordCount: number;
+  priorityScore: number;
 }
 
 export interface ProjectKeywordsResponse {

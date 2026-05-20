@@ -250,7 +250,10 @@ function ChecklistRow({
   onToggle: () => void;
 }) {
   const hasDetails =
-    item.affectedUrls.length > 0 || !!item.message || !!item.suggestion;
+    item.affectedUrls.length > 0 ||
+    !!item.message ||
+    !!item.suggestion ||
+    (item.sourceSnippets && item.sourceSnippets.length > 0);
 
   return (
     <>
@@ -301,6 +304,18 @@ function ChecklistRow({
               <div className={styles.expandSection}>
                 <div className={styles.expandLabel}>How to fix</div>
                 <div className={styles.expandText}>{item.suggestion}</div>
+              </div>
+            )}
+            {item.sourceSnippets && item.sourceSnippets.length > 0 && (
+              <div className={styles.expandSection}>
+                <div className={styles.expandLabel}>Offending source</div>
+                <div className={styles.snippetList}>
+                  {item.sourceSnippets.map((snippet, i) => (
+                    <pre key={i} className={styles.snippetBlock}>
+                      <code>{snippet}</code>
+                    </pre>
+                  ))}
+                </div>
               </div>
             )}
             {item.affectedUrls.length > 0 && (
